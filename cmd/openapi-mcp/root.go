@@ -11,6 +11,7 @@ import (
 
 	"github.com/pb33f/libopenapi"
 	"github.com/spf13/cobra"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/loopwork-ai/openapi-mcp/mcp"
 )
@@ -26,17 +27,23 @@ from stdin, making corresponding API calls and returning JSON-RPC responses to s
 		ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 		defer cancel()
 
-		client := http.DefaultClient
+		g, ctx := errgroup.WithContext(ctx)
 
-		specURL := args[0]
-		doc, err := loadOpenAPISpec(ctx, specURL, client)
-		if err != nil {
-			return fmt.Errorf("error loading OpenAPI spec: %v", err)
-		}
+		g.Go(func() error {
+			client := http.DefaultClient
 
-		server := mcp.NewServer(doc, specURL, client)
-		transport := mcp.NewStdioTransport(server, os.Stdin, os.Stdout, os.Stderr)
-		return transport.Run(ctx)
+			specURL := args[0]
+			doc, err := loadOpenAPISpec(ctx, specURL, client)
+			if err != nil {
+				return fmt.Errorf("error loading OpenAPI spec: %v", err)
+			}
+
+			server := mcp.NewServer(doc, specURL, client)
+			transport := mcp.NewStdioTransport(server, os.Stdin, os.Stdout, os.Stderr)
+			return transport.Run(ctx)
+		})
+
+		return g.Wait()
 	},
 }
 
