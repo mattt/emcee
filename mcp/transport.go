@@ -15,6 +15,7 @@ type Transport struct {
 	handler jsonrpc.Handler
 	scanner *bufio.Scanner
 	writer  *json.Encoder
+	bufOut  *bufio.Writer
 	errOut  io.Writer
 }
 
@@ -25,10 +26,12 @@ func NewStdioTransport(handler jsonrpc.Handler, in io.Reader, out io.Writer, err
 	buf := make([]byte, 0, 64*1024)
 	scanner.Buffer(buf, 1024*1024)
 
+	bufOut := bufio.NewWriter(out)
 	return &Transport{
 		handler: handler,
 		scanner: scanner,
-		writer:  json.NewEncoder(out),
+		writer:  json.NewEncoder(bufOut),
+		bufOut:  bufOut,
 		errOut:  errOut,
 	}
 }
@@ -58,6 +61,7 @@ func (t *Transport) Run(ctx context.Context) error {
 				if err := t.writer.Encode(response); err != nil {
 					fmt.Fprintf(t.errOut, "Error encoding response: %v\n", err)
 				}
+				t.bufOut.Flush()
 				continue
 			}
 
@@ -65,6 +69,7 @@ func (t *Transport) Run(ctx context.Context) error {
 			if err := t.writer.Encode(response); err != nil {
 				fmt.Fprintf(t.errOut, "Error encoding response: %v\n", err)
 			}
+			t.bufOut.Flush()
 		}
 	}
 }
