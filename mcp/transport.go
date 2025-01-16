@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -33,30 +34,37 @@ func NewStdioTransport(handler jsonrpc.Handler, in io.Reader, out io.Writer, err
 }
 
 // Run starts the transport loop, reading from stdin and writing to stdout
-func (t *Transport) Run() error {
-	for t.scanner.Scan() {
-		line := t.scanner.Text()
-		if line == "" {
-			continue
-		}
+func (t *Transport) Run(ctx context.Context) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			if !t.scanner.Scan() {
+				if err := t.scanner.Err(); err != nil {
+					return fmt.Errorf("scanner error: %v", err)
+				}
+				return nil
+			}
 
-		var request jsonrpc.Request
-		if err := json.Unmarshal([]byte(line), &request); err != nil {
-			response := jsonrpc.NewResponse(nil, nil, jsonrpc.NewError(jsonrpc.ErrParse, err))
+			line := t.scanner.Text()
+			if line == "" {
+				continue
+			}
+
+			var request jsonrpc.Request
+			if err := json.Unmarshal([]byte(line), &request); err != nil {
+				response := jsonrpc.NewResponse(nil, nil, jsonrpc.NewError(jsonrpc.ErrParse, err))
+				if err := t.writer.Encode(response); err != nil {
+					fmt.Fprintf(t.errOut, "Error encoding response: %v\n", err)
+				}
+				continue
+			}
+
+			response := t.handler.Handle(request)
 			if err := t.writer.Encode(response); err != nil {
 				fmt.Fprintf(t.errOut, "Error encoding response: %v\n", err)
 			}
-			continue
-		}
-
-		response := t.handler.Handle(request)
-		if err := t.writer.Encode(response); err != nil {
-			fmt.Fprintf(t.errOut, "Error encoding response: %v\n", err)
 		}
 	}
-
-	if err := t.scanner.Err(); err != nil {
-		return fmt.Errorf("scanner error: %v", err)
-	}
-	return nil
 }

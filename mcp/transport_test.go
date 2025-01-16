@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -85,7 +86,7 @@ func TestTransport_Run(t *testing.T) {
 
 			// Create and run transport
 			transport := NewStdioTransport(mockServer, in, out, errOut)
-			err := transport.Run()
+			err := transport.Run(context.Background())
 
 			if tt.expectSuccess {
 				assert.NoError(t, err)
@@ -126,7 +127,7 @@ func TestTransport_Integration(t *testing.T) {
 	errOut := &bytes.Buffer{}
 
 	transport := NewStdioTransport(server, in, out, errOut)
-	err = transport.Run()
+	err = transport.Run(context.Background())
 	require.NoError(t, err)
 
 	// Verify the response

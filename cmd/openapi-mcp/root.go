@@ -28,7 +28,7 @@ from stdin, making corresponding API calls and returning JSON-RPC responses to s
 
 		server := mcp.NewServer(doc, specURL)
 		transport := mcp.NewStdioTransport(server, os.Stdin, os.Stdout, os.Stderr)
-		return transport.Run()
+		return transport.Run(cmd.Context())
 	},
 }
 
