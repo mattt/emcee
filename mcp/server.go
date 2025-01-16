@@ -65,7 +65,7 @@ func (s *Server) Handle(request jsonrpc.Request) jsonrpc.Response {
 	case "tools/call":
 		return s.handleToolsCall(request)
 	default:
-		return jsonrpc.NewResponse(request.Id, nil, jsonrpc.NewError(jsonrpc.ErrMethodNotFound, nil))
+		return jsonrpc.NewResponse(request.ID, nil, jsonrpc.NewError(jsonrpc.ErrMethodNotFound, nil))
 	}
 }
 
@@ -81,13 +81,13 @@ func (s *Server) handleInitialize(request jsonrpc.Request) jsonrpc.Response {
 		},
 		ServerInfo: s.info,
 	}
-	return jsonrpc.NewResponse(request.Id, response, nil)
+	return jsonrpc.NewResponse(request.ID, response, nil)
 }
 
 func (s *Server) handleToolsList(request jsonrpc.Request) jsonrpc.Response {
 	model, err := s.doc.BuildV3Model()
 	if err != nil {
-		return jsonrpc.NewResponse(request.Id, nil, jsonrpc.NewError(jsonrpc.ErrInternal, err))
+		return jsonrpc.NewResponse(request.ID, nil, jsonrpc.NewError(jsonrpc.ErrInternal, err))
 	}
 
 	tools := []Tool{}
@@ -111,27 +111,23 @@ func (s *Server) handleToolsList(request jsonrpc.Request) jsonrpc.Response {
 		}
 	}
 
-	return jsonrpc.NewResponse(request.Id, ToolsListResponse{Tools: tools}, nil)
+	return jsonrpc.NewResponse(request.ID, ToolsListResponse{Tools: tools}, nil)
 }
 
 func (s *Server) handleToolsCall(request jsonrpc.Request) jsonrpc.Response {
 	var params ToolCallParams
 	if err := json.Unmarshal(request.Params, &params); err != nil {
-		return jsonrpc.NewResponse(request.Id, nil, jsonrpc.NewError(jsonrpc.ErrInvalidParams, err))
+		return jsonrpc.NewResponse(request.ID, nil, jsonrpc.NewError(jsonrpc.ErrInvalidParams, err))
 	}
 
 	model, errs := s.doc.BuildV3Model()
 	if errs != nil {
-		return jsonrpc.NewResponse(request.Id, nil, jsonrpc.NewError(jsonrpc.ErrInternal, errs))
+		return jsonrpc.NewResponse(request.ID, nil, jsonrpc.NewError(jsonrpc.ErrInternal, errs))
 	}
 
 	method, path, found := s.findOperation(&model.Model, params.Name)
 	if !found {
-		parts := strings.SplitN(params.Name, " ", 2)
-		if len(parts) != 2 {
-			return jsonrpc.NewResponse(request.Id, nil, jsonrpc.NewError(jsonrpc.ErrInvalidParams, "Invalid tool name format"))
-		}
-		method, path = parts[0], parts[1]
+		return jsonrpc.NewResponse(request.ID, nil, jsonrpc.NewError(jsonrpc.ErrMethodNotFound, nil))
 	}
 
 	url := s.baseURL + path
@@ -140,14 +136,14 @@ func (s *Server) handleToolsCall(request jsonrpc.Request) jsonrpc.Response {
 	if len(params.Arguments) > 0 && (method == "POST" || method == "PUT" || method == "PATCH") {
 		jsonBody, err := json.Marshal(params.Arguments)
 		if err != nil {
-			return jsonrpc.NewResponse(request.Id, nil, jsonrpc.NewError(jsonrpc.ErrInternal, err))
+			return jsonrpc.NewResponse(request.ID, nil, jsonrpc.NewError(jsonrpc.ErrInternal, err))
 		}
 		body = bytes.NewReader(jsonBody)
 	}
 
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
-		return toolError(request.Id, fmt.Sprintf("Error making request: %v", err))
+		return toolError(request.ID, fmt.Sprintf("Error making request: %v", err))
 	}
 
 	if body != nil {
@@ -156,29 +152,29 @@ func (s *Server) handleToolsCall(request jsonrpc.Request) jsonrpc.Response {
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return toolError(request.Id, fmt.Sprintf("Error making request: %v", err))
+		return toolError(request.ID, fmt.Sprintf("Error making request: %v", err))
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return toolError(request.Id, fmt.Sprintf("Error reading response: %v", err))
+		return toolError(request.ID, fmt.Sprintf("Error reading response: %v", err))
 	}
 
 	contentType := resp.Header.Get("Content-Type")
 	if strings.HasPrefix(contentType, "image/") {
 		// For image responses, base64 encode the data
 		if resp.StatusCode >= 400 {
-			return toolError(request.Id, fmt.Sprintf("Image request failed with status %d", resp.StatusCode))
+			return toolError(request.ID, fmt.Sprintf("Image request failed with status %d", resp.StatusCode))
 		}
-		return toolSuccess(request.Id, NewImageContent(base64.StdEncoding.EncodeToString(respBody), contentType, []Role{RoleAssistant}, nil))
+		return toolSuccess(request.ID, NewImageContent(base64.StdEncoding.EncodeToString(respBody), contentType, []Role{RoleAssistant}, nil))
 	}
 
 	// Try to parse as JSON first
 	var jsonResult interface{}
 	if err := json.Unmarshal(respBody, &jsonResult); err != nil {
 		// If not JSON, return as plain text
-		return toolSuccess(request.Id, NewTextContent(string(respBody), []Role{RoleAssistant}, nil))
+		return toolSuccess(request.ID, NewTextContent(string(respBody), []Role{RoleAssistant}, nil))
 	}
 
 	// For JSON responses, convert to string for better readability
@@ -188,9 +184,9 @@ func (s *Server) handleToolsCall(request jsonrpc.Request) jsonrpc.Response {
 	}
 
 	if resp.StatusCode >= 400 {
-		return toolError(request.Id, string(jsonStr))
+		return toolError(request.ID, string(jsonStr))
 	}
-	return toolSuccess(request.Id, NewTextContent(string(jsonStr), []Role{RoleAssistant}, nil))
+	return toolSuccess(request.ID, NewTextContent(string(jsonStr), []Role{RoleAssistant}, nil))
 }
 
 // toolSuccess creates a successful tool response with the given content

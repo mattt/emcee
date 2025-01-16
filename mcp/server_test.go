@@ -120,17 +120,14 @@ func TestServer_HandleInitialize(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a basic initialize request
-	request := jsonrpc.Request{
-		Version: "2.0",
-		Method:  "initialize",
-		Id:      1,
-		Params:  json.RawMessage(`{}`),
-	}
+	request := jsonrpc.NewRequest("initialize", json.RawMessage(`{}`), 1)
 
 	// Get the response
 	response := server.Handle(request)
 
 	// Assert no error
+	assert.Equal(t, "2.0", response.Version)
+	assert.Equal(t, 1, response.ID.Value())
 	assert.Nil(t, response.Error)
 
 	// Parse the response result
@@ -179,7 +176,7 @@ func TestHandleToolsList(t *testing.T) {
 
 	// Verify response structure
 	assert.Equal(t, "2.0", response.Version)
-	assert.Equal(t, 1, response.Id)
+	assert.Equal(t, 1, response.ID.Value())
 	assert.Nil(t, response.Error)
 
 	// Verify tools list
@@ -232,7 +229,7 @@ func TestHandleToolsCall(t *testing.T) {
 			request: jsonrpc.NewRequest("tools/call", json.RawMessage(`{"name": "listPets"}`), 1),
 			validate: func(t *testing.T, response jsonrpc.Response) {
 				assert.Equal(t, "2.0", response.Version)
-				assert.Equal(t, 1, response.Id)
+				assert.Equal(t, 1, response.ID.Value())
 				assert.Nil(t, response.Error)
 
 				result, ok := response.Result.(CallToolResult)
@@ -257,7 +254,7 @@ func TestHandleToolsCall(t *testing.T) {
 			request: jsonrpc.NewRequest("tools/call", json.RawMessage(`{"name": "createPet", "arguments": {"name": "Whiskers", "age": 5}}`), 2),
 			validate: func(t *testing.T, response jsonrpc.Response) {
 				assert.Equal(t, "2.0", response.Version)
-				assert.Equal(t, 2, response.Id)
+				assert.Equal(t, 2, response.ID.Value())
 				assert.Nil(t, response.Error)
 
 				result, ok := response.Result.(CallToolResult)
@@ -284,7 +281,7 @@ func TestHandleToolsCall(t *testing.T) {
 			request: jsonrpc.NewRequest("tools/call", json.RawMessage(`{"name": "getPetImage"}`), 4),
 			validate: func(t *testing.T, response jsonrpc.Response) {
 				assert.Equal(t, "2.0", response.Version)
-				assert.Equal(t, 4, response.Id)
+				assert.Equal(t, 4, response.ID.Value())
 				assert.Nil(t, response.Error)
 
 				result, ok := response.Result.(CallToolResult)
@@ -310,10 +307,9 @@ func TestHandleToolsCall(t *testing.T) {
 			request: jsonrpc.NewRequest("tools/call", json.RawMessage(`{"name": "nonexistentOperation"}`), 3),
 			validate: func(t *testing.T, response jsonrpc.Response) {
 				assert.Equal(t, "2.0", response.Version)
-				assert.Equal(t, 3, response.Id)
-				assert.NotNil(t, response.Error)
-				assert.Equal(t, int(jsonrpc.ErrInvalidParams), int(response.Error.Code))
-				assert.Equal(t, "Invalid params", response.Error.Message)
+				assert.Equal(t, 3, response.ID.Value())
+				assert.Equal(t, jsonrpc.ErrMethodNotFound, response.Error.Code)
+				assert.Equal(t, "Method not found", response.Error.Message)
 			},
 		},
 	}
@@ -330,16 +326,12 @@ func TestHandleInvalidMethod(t *testing.T) {
 	server, ts := setupTestServer(t)
 	defer ts.Close()
 
-	request := jsonrpc.Request{
-		Version: "2.0",
-		Method:  "invalid/method",
-		Id:      1,
-	}
+	request := jsonrpc.NewRequest("invalid/method", nil, 1)
 
 	response := server.Handle(request)
 
 	assert.Equal(t, "2.0", response.Version)
-	assert.Equal(t, 1, response.Id)
+	assert.Equal(t, 1, response.ID.Value())
 	assert.NotNil(t, response.Error)
 	assert.Equal(t, int(jsonrpc.ErrMethodNotFound), int(response.Error.Code))
 	assert.Equal(t, "Method not found", response.Error.Message)

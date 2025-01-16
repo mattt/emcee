@@ -6,16 +6,18 @@ import "encoding/json"
 type Request struct {
 	Version string          `json:"jsonrpc"`
 	Method  string          `json:"method"`
-	Params  json.RawMessage `json:"params"`
-	Id      interface{}     `json:"id"`
+	Params  json.RawMessage `json:"params,omitempty"`
+	ID      ID              `json:"id"`
 }
 
 // NewRequest creates a new Request object
 func NewRequest(method string, params json.RawMessage, id interface{}) Request {
+	reqID, _ := NewID(id)
+
 	return Request{
 		Version: Version,
 		Method:  method,
 		Params:  params,
-		Id:      id,
+		ID:      reqID,
 	}
 }

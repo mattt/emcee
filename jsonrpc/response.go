@@ -5,15 +5,17 @@ type Response struct {
 	Version string      `json:"jsonrpc"`
 	Result  interface{} `json:"result,omitempty"`
 	Error   *Error      `json:"error,omitempty"`
-	Id      interface{} `json:"id"`
+	ID      ID          `json:"id"`
 }
 
 // NewResponse creates a new Response object
 func NewResponse(id interface{}, result interface{}, err *Error) Response {
+	respID, _ := NewID(id)
+
 	return Response{
 		Version: Version,
+		ID:      respID,
 		Result:  result,
 		Error:   err,
-		Id:      id,
 	}
 }

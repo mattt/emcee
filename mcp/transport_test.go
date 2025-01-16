@@ -44,7 +44,7 @@ func TestTransport_Run(t *testing.T) {
 		{
 			name:  "invalid JSON request",
 			input: `{"jsonrpc": "2.0" method: invalid}`,
-			expectedOut: `{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error","data":{"Offset":19}},"id":null}
+			expectedOut: `{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error","data":{"Offset":19}},"id":""}
 `,
 			expectSuccess: true,
 		},
@@ -137,7 +137,7 @@ func TestTransport_Integration(t *testing.T) {
 	err = json.NewDecoder(bytes.NewReader(out.Bytes())).Decode(&response)
 	require.NoError(t, err)
 	assert.Equal(t, "2.0", response.Version)
-	assert.Equal(t, float64(1), response.Id)
+	assert.Equal(t, 1, response.ID.Value())
 	assert.Nil(t, response.Error)
 
 	// Verify the response contains a tools list
@@ -146,4 +146,79 @@ func TestTransport_Integration(t *testing.T) {
 	tools, ok := result["tools"].([]interface{})
 	require.True(t, ok)
 	assert.NotNil(t, tools)
+
+	// Test tools/call request
+	input = `{"jsonrpc": "2.0", "method": "tools/call", "params": {}, "id": 2}
+`
+	in = strings.NewReader(input)
+	out = &bytes.Buffer{}
+	errOut = &bytes.Buffer{}
+
+	transport = NewStdioTransport(server, in, out, errOut)
+	err = transport.Run(context.Background())
+	require.NoError(t, err)
+
+	// Verify the response
+	err = json.NewDecoder(bytes.NewReader(out.Bytes())).Decode(&response)
+	require.NoError(t, err)
+	assert.Equal(t, "2.0", response.Version)
+	assert.Equal(t, 2, response.ID.Value())
+	assert.Equal(t, jsonrpc.ErrMethodNotFound, response.Error.Code)
+	assert.Equal(t, "Method not found", response.Error.Message)
+
+	// Test tools/call request
+	input = `{"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "test"}, "id": 4}
+`
+	in = strings.NewReader(input)
+	out = &bytes.Buffer{}
+	errOut = &bytes.Buffer{}
+
+	transport = NewStdioTransport(server, in, out, errOut)
+	err = transport.Run(context.Background())
+	require.NoError(t, err)
+
+	// Verify the response
+	err = json.NewDecoder(bytes.NewReader(out.Bytes())).Decode(&response)
+	require.NoError(t, err)
+	assert.Equal(t, "2.0", response.Version)
+	assert.Equal(t, 4, response.ID.Value())
+
+	assert.Equal(t, jsonrpc.ErrMethodNotFound, response.Error.Code)
+	assert.Equal(t, "Method not found", response.Error.Message)
+
+	// Test tools/call request
+	input = `{"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "test", "arguments": {}}, "id": 3}
+`
+	in = strings.NewReader(input)
+	out = &bytes.Buffer{}
+	errOut = &bytes.Buffer{}
+
+	transport = NewStdioTransport(server, in, out, errOut)
+	err = transport.Run(context.Background())
+	require.NoError(t, err)
+
+	// Verify the response
+	err = json.NewDecoder(bytes.NewReader(out.Bytes())).Decode(&response)
+	require.NoError(t, err)
+	assert.Equal(t, "2.0", response.Version)
+	assert.Equal(t, 3, response.ID.Value())
+	assert.NotNil(t, response.Error)
+
+	// Test tools/list request
+	input = `{"jsonrpc": "2.0", "method": "tools/list", "params": {}, "id": 1}
+`
+	in = strings.NewReader(input)
+	out = &bytes.Buffer{}
+	errOut = &bytes.Buffer{}
+
+	transport = NewStdioTransport(server, in, out, errOut)
+	err = transport.Run(context.Background())
+	require.NoError(t, err)
+
+	// Verify the response
+	err = json.NewDecoder(bytes.NewReader(out.Bytes())).Decode(&response)
+	require.NoError(t, err)
+	assert.Equal(t, "2.0", response.Version)
+	assert.Equal(t, 1, response.ID.Value())
+	assert.NotNil(t, response.Error)
 }
