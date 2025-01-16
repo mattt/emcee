@@ -9,14 +9,14 @@ import (
 
 // Transport handles the communication between stdin/stdout and the MCP server
 type Transport struct {
-	handler JsonRpcHandler
+	handler RequestHandler
 	reader  *bufio.Reader
 	writer  *json.Encoder
 	errOut  io.Writer
 }
 
 // NewTransport creates a new Transport instance
-func NewTransport(handler JsonRpcHandler, in io.Reader, out io.Writer, errOut io.Writer) *Transport {
+func NewTransport(handler RequestHandler, in io.Reader, out io.Writer, errOut io.Writer) *Transport {
 	return &Transport{
 		handler: handler,
 		reader:  bufio.NewReader(in),
@@ -40,12 +40,9 @@ func (t *Transport) Run() error {
 		var request JsonRpcRequest
 		if err := json.Unmarshal([]byte(line), &request); err != nil {
 			response := JsonRpcResponse{
-				JsonRpc: "2.0",
-				Error: &JsonRpcError{
-					Code:    -32700,
-					Message: "Parse error",
-					Data:    err,
-				},
+				JsonRpc: JsonRpcVersion,
+				Error:   NewJsonRpcError(ErrParse, err),
+				Id:      nil,
 			}
 			t.writer.Encode(response)
 			continue

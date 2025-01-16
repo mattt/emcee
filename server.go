@@ -37,12 +37,9 @@ func (s *Server) HandleRequest(request JsonRpcRequest) JsonRpcResponse {
 		return s.handleToolsCall(request)
 	default:
 		return JsonRpcResponse{
-			JsonRpc: "2.0",
-			Error: &JsonRpcError{
-				Code:    -32601,
-				Message: "Method not found",
-			},
-			Id: request.Id,
+			JsonRpc: JsonRpcVersion,
+			Error:   NewJsonRpcError(ErrMethodNotFound, nil),
+			Id:      request.Id,
 		}
 	}
 }
@@ -51,13 +48,9 @@ func (s *Server) handleToolsList(request JsonRpcRequest) JsonRpcResponse {
 	model, err := s.doc.BuildV3Model()
 	if err != nil {
 		return JsonRpcResponse{
-			JsonRpc: "2.0",
-			Error: &JsonRpcError{
-				Code:    -32603,
-				Message: "Error building OpenAPI model",
-				Data:    err,
-			},
-			Id: request.Id,
+			JsonRpc: JsonRpcVersion,
+			Error:   NewJsonRpcError(ErrInternal, err),
+			Id:      request.Id,
 		}
 	}
 
@@ -83,7 +76,7 @@ func (s *Server) handleToolsList(request JsonRpcRequest) JsonRpcResponse {
 	}
 
 	return JsonRpcResponse{
-		JsonRpc: "2.0",
+		JsonRpc: JsonRpcVersion,
 		Result:  ToolsListResponse{Tools: tools},
 		Id:      request.Id,
 	}
@@ -93,26 +86,18 @@ func (s *Server) handleToolsCall(request JsonRpcRequest) JsonRpcResponse {
 	var params ToolCallParams
 	if err := json.Unmarshal(request.Params, &params); err != nil {
 		return JsonRpcResponse{
-			JsonRpc: "2.0",
-			Error: &JsonRpcError{
-				Code:    -32602,
-				Message: "Invalid params",
-				Data:    err,
-			},
-			Id: request.Id,
+			JsonRpc: JsonRpcVersion,
+			Error:   NewJsonRpcError(ErrInvalidParams, err),
+			Id:      request.Id,
 		}
 	}
 
 	model, errs := s.doc.BuildV3Model()
 	if errs != nil {
 		return JsonRpcResponse{
-			JsonRpc: "2.0",
-			Error: &JsonRpcError{
-				Code:    -32603,
-				Message: "Error building OpenAPI model",
-				Data:    errs,
-			},
-			Id: request.Id,
+			JsonRpc: JsonRpcVersion,
+			Error:   NewJsonRpcError(ErrInternal, errs),
+			Id:      request.Id,
 		}
 	}
 
@@ -121,12 +106,9 @@ func (s *Server) handleToolsCall(request JsonRpcRequest) JsonRpcResponse {
 		parts := strings.SplitN(params.Name, " ", 2)
 		if len(parts) != 2 {
 			return JsonRpcResponse{
-				JsonRpc: "2.0",
-				Error: &JsonRpcError{
-					Code:    -32602,
-					Message: "Invalid tool name format",
-				},
-				Id: request.Id,
+				JsonRpc: JsonRpcVersion,
+				Error:   NewJsonRpcError(ErrInvalidParams, "Invalid tool name format"),
+				Id:      request.Id,
 			}
 		}
 		method, path = parts[0], parts[1]
@@ -139,13 +121,9 @@ func (s *Server) handleToolsCall(request JsonRpcRequest) JsonRpcResponse {
 		jsonBody, err := json.Marshal(params.Parameters)
 		if err != nil {
 			return JsonRpcResponse{
-				JsonRpc: "2.0",
-				Error: &JsonRpcError{
-					Code:    -32603,
-					Message: "Error encoding request body",
-					Data:    err,
-				},
-				Id: request.Id,
+				JsonRpc: JsonRpcVersion,
+				Error:   NewJsonRpcError(ErrInternal, err),
+				Id:      request.Id,
 			}
 		}
 		body = bytes.NewReader(jsonBody)
@@ -154,13 +132,9 @@ func (s *Server) handleToolsCall(request JsonRpcRequest) JsonRpcResponse {
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
 		return JsonRpcResponse{
-			JsonRpc: "2.0",
-			Error: &JsonRpcError{
-				Code:    -32603,
-				Message: "Error creating request",
-				Data:    err,
-			},
-			Id: request.Id,
+			JsonRpc: JsonRpcVersion,
+			Error:   NewJsonRpcError(ErrInternal, err),
+			Id:      request.Id,
 		}
 	}
 
@@ -171,13 +145,9 @@ func (s *Server) handleToolsCall(request JsonRpcRequest) JsonRpcResponse {
 	resp, err := s.client.Do(req)
 	if err != nil {
 		return JsonRpcResponse{
-			JsonRpc: "2.0",
-			Error: &JsonRpcError{
-				Code:    -32603,
-				Message: "Error making request",
-				Data:    err,
-			},
-			Id: request.Id,
+			JsonRpc: JsonRpcVersion,
+			Error:   NewJsonRpcError(ErrInternal, err),
+			Id:      request.Id,
 		}
 	}
 	defer resp.Body.Close()
@@ -185,13 +155,9 @@ func (s *Server) handleToolsCall(request JsonRpcRequest) JsonRpcResponse {
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return JsonRpcResponse{
-			JsonRpc: "2.0",
-			Error: &JsonRpcError{
-				Code:    -32603,
-				Message: "Error reading response",
-				Data:    err,
-			},
-			Id: request.Id,
+			JsonRpc: JsonRpcVersion,
+			Error:   NewJsonRpcError(ErrInternal, err),
+			Id:      request.Id,
 		}
 	}
 
@@ -201,7 +167,7 @@ func (s *Server) handleToolsCall(request JsonRpcRequest) JsonRpcResponse {
 	}
 
 	return JsonRpcResponse{
-		JsonRpc: "2.0",
+		JsonRpc: JsonRpcVersion,
 		Result:  result,
 		Id:      request.Id,
 	}

@@ -185,7 +185,7 @@ func TestHandleToolsCall(t *testing.T) {
 				assert.Equal(t, 3, response.Id)
 				assert.NotNil(t, response.Error)
 				assert.Equal(t, -32602, response.Error.Code)
-				assert.Equal(t, "Invalid tool name format", response.Error.Message)
+				assert.Equal(t, "Invalid params", response.Error.Message)
 			},
 		},
 	}
