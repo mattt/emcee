@@ -65,20 +65,41 @@ type ImageContent struct {
 	MimeType string `json:"mimeType"`
 }
 
-// ResourceContents represents the contents of a specific resource or sub-resource
-type ResourceContents struct {
-	URI      string `json:"uri"`
-	MimeType string `json:"mimeType,omitempty"`
-}
-
-// EmbeddedResource represents the contents of a resource embedded into a prompt or tool call result
-type EmbeddedResource struct {
-	Content
-	Resource ResourceContents `json:"resource"`
-}
-
 // CallToolResult represents the server's response to a tool call
 type CallToolResult struct {
 	Content []interface{} `json:"content"`
 	IsError bool          `json:"isError,omitempty"`
+}
+
+// NewTextContent creates a new TextContent with the given text and optional annotations
+func NewTextContent(text string, audience []Role, priority *float64) TextContent {
+	return TextContent{
+		Content: Content{
+			Type: "text",
+			Annotated: Annotated{
+				Annotations: &Annotations{
+					Audience: audience,
+					Priority: priority,
+				},
+			},
+		},
+		Text: text,
+	}
+}
+
+// NewImageContent creates a new ImageContent with the given data and optional annotations
+func NewImageContent(data string, mimeType string, audience []Role, priority *float64) ImageContent {
+	return ImageContent{
+		Content: Content{
+			Type: "image",
+			Annotated: Annotated{
+				Annotations: &Annotations{
+					Audience: audience,
+					Priority: priority,
+				},
+			},
+		},
+		Data:     data,
+		MimeType: mimeType,
+	}
 }

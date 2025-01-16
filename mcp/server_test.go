@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -47,11 +48,34 @@ const testOpenAPISpec = `{
           }
         }
       }
+    },
+    "/pets/image": {
+      "get": {
+        "operationId": "getPetImage",
+        "summary": "Get a pet's image",
+        "description": "Returns a pet's image in PNG format",
+        "responses": {
+          "200": {
+            "description": "A pet image",
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }`
 
 func setupTestServer(t *testing.T) (*Server, *httptest.Server) {
+	// Create a small test image
+	imgData := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A} // PNG header
+
 	// Create a test HTTP server
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -68,6 +92,9 @@ func setupTestServer(t *testing.T) (*Server, *httptest.Server) {
 				pet["id"] = 3
 				json.NewEncoder(w).Encode(pet)
 			}
+		case "/pets/image":
+			w.Header().Set("Content-Type", "image/png")
+			w.Write(imgData)
 		}
 	}))
 
@@ -99,15 +126,18 @@ func TestHandleToolsList(t *testing.T) {
 	// Verify tools list
 	toolsResp, ok := response.Result.(ToolsListResponse)
 	assert.True(t, ok)
-	assert.Len(t, toolsResp.Tools, 2) // GET and POST /pets
+	assert.Len(t, toolsResp.Tools, 3) // GET and POST /pets, plus GET /pets/image
 
 	// Verify GET operation
-	var getOp, postOp Tool
+	var getOp, postOp, imageOp Tool
 	for _, tool := range toolsResp.Tools {
-		if tool.Name == "listPets" {
+		switch tool.Name {
+		case "listPets":
 			getOp = tool
-		} else if tool.Name == "createPet" {
+		case "createPet":
 			postOp = tool
+		case "getPetImage":
+			imageOp = tool
 		}
 	}
 
@@ -119,11 +149,19 @@ func TestHandleToolsList(t *testing.T) {
 	assert.Equal(t, "Creates a new pet in the system", postOp.Description)
 	assert.Contains(t, postOp.InputSchema.Properties, "name")
 	assert.Contains(t, postOp.InputSchema.Properties, "age")
+
+	// Verify Image operation
+	assert.Equal(t, "getPetImage", imageOp.Name)
+	assert.Equal(t, "Returns a pet's image in PNG format", imageOp.Description)
+	assert.Empty(t, imageOp.InputSchema.Properties) // No input parameters needed
 }
 
 func TestHandleToolsCall(t *testing.T) {
 	server, ts := setupTestServer(t)
 	defer ts.Close()
+
+	// Create a small test image
+	imgData := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A} // PNG header
 
 	tests := []struct {
 		name     string
@@ -180,6 +218,32 @@ func TestHandleToolsCall(t *testing.T) {
 				assert.Equal(t, "Whiskers", pet["name"])
 				assert.Equal(t, float64(5), pet["age"])
 				assert.Equal(t, float64(3), pet["id"])
+			},
+		},
+		{
+			name:    "GET image request",
+			request: jsonrpc.NewRequest("tools/call", json.RawMessage(`{"name": "getPetImage"}`), 4),
+			validate: func(t *testing.T, response jsonrpc.Response) {
+				assert.Equal(t, "2.0", response.Version)
+				assert.Equal(t, 4, response.Id)
+				assert.Nil(t, response.Error)
+
+				result, ok := response.Result.(CallToolResult)
+				assert.True(t, ok)
+				assert.Len(t, result.Content, 1)
+				assert.False(t, result.IsError)
+
+				content, ok := result.Content[0].(ImageContent)
+				assert.True(t, ok)
+				assert.Equal(t, "image", content.Type)
+				assert.NotNil(t, content.Annotations)
+				assert.Contains(t, content.Annotations.Audience, RoleAssistant)
+				assert.Equal(t, "image/png", content.MimeType)
+
+				// Decode base64 data
+				decoded, err := base64.StdEncoding.DecodeString(content.Data)
+				assert.NoError(t, err)
+				assert.Equal(t, imgData, decoded)
 			},
 		},
 		{

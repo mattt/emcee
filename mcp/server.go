@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -105,7 +106,7 @@ func (s *Server) handleToolsCall(request jsonrpc.Request) jsonrpc.Response {
 
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
-		return createResponse(request.Id, fmt.Sprintf("Error making request: %v", err), true)
+		return toolError(request.Id, fmt.Sprintf("Error making request: %v", err))
 	}
 
 	if body != nil {
@@ -114,20 +115,29 @@ func (s *Server) handleToolsCall(request jsonrpc.Request) jsonrpc.Response {
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return createResponse(request.Id, fmt.Sprintf("Error making request: %v", err), true)
+		return toolError(request.Id, fmt.Sprintf("Error making request: %v", err))
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return createResponse(request.Id, fmt.Sprintf("Error reading response: %v", err), true)
+		return toolError(request.Id, fmt.Sprintf("Error reading response: %v", err))
+	}
+
+	contentType := resp.Header.Get("Content-Type")
+	if strings.HasPrefix(contentType, "image/") {
+		// For image responses, base64 encode the data
+		if resp.StatusCode >= 400 {
+			return toolError(request.Id, fmt.Sprintf("Image request failed with status %d", resp.StatusCode))
+		}
+		return toolSuccess(request.Id, NewImageContent(base64.StdEncoding.EncodeToString(respBody), contentType, []Role{RoleAssistant}, nil))
 	}
 
 	// Try to parse as JSON first
 	var jsonResult interface{}
 	if err := json.Unmarshal(respBody, &jsonResult); err != nil {
 		// If not JSON, return as plain text
-		return createResponse(request.Id, string(respBody), false)
+		return toolSuccess(request.Id, NewTextContent(string(respBody), []Role{RoleAssistant}, nil))
 	}
 
 	// For JSON responses, convert to string for better readability
@@ -136,25 +146,27 @@ func (s *Server) handleToolsCall(request jsonrpc.Request) jsonrpc.Response {
 		jsonStr = respBody
 	}
 
-	return createResponse(request.Id, string(jsonStr), resp.StatusCode >= 400)
+	if resp.StatusCode >= 400 {
+		return toolError(request.Id, string(jsonStr))
+	}
+	return toolSuccess(request.Id, NewTextContent(string(jsonStr), []Role{RoleAssistant}, nil))
 }
 
-func createResponse(id interface{}, message string, isError bool) jsonrpc.Response {
+// toolSuccess creates a successful tool response with the given content
+func toolSuccess(id interface{}, content interface{}) jsonrpc.Response {
+	return jsonrpc.NewResponse(id, CallToolResult{
+		Content: []interface{}{content},
+		IsError: false,
+	}, nil)
+}
+
+// toolError creates an error tool response with the given message
+func toolError(id interface{}, message string) jsonrpc.Response {
 	return jsonrpc.NewResponse(id, CallToolResult{
 		Content: []interface{}{
-			TextContent{
-				Content: Content{
-					Type: "text",
-					Annotated: Annotated{
-						Annotations: &Annotations{
-							Audience: []Role{RoleAssistant},
-						},
-					},
-				},
-				Text: message,
-			},
+			NewTextContent(message, []Role{RoleAssistant}, nil),
 		},
-		IsError: isError,
+		IsError: true,
 	}, nil)
 }
 
