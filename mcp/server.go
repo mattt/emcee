@@ -1,4 +1,4 @@
-package main
+package mcp
 
 import (
 	"bytes"
@@ -10,6 +10,8 @@ import (
 
 	"github.com/pb33f/libopenapi"
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
+
+	"github.com/loopwork-ai/openapi-mcp/jsonrpc"
 )
 
 // Server represents an MCP server that processes JSON-RPC requests
@@ -28,30 +30,22 @@ func NewServer(doc libopenapi.Document, baseURL string) *Server {
 	}
 }
 
-// HandleRequest processes a single JSON-RPC request and returns a response
-func (s *Server) HandleRequest(request JsonRpcRequest) JsonRpcResponse {
+// Handle processes a single JSON-RPC request and returns a response
+func (s *Server) Handle(request jsonrpc.Request) jsonrpc.Response {
 	switch request.Method {
 	case "tools/list":
 		return s.handleToolsList(request)
 	case "tools/call":
 		return s.handleToolsCall(request)
 	default:
-		return JsonRpcResponse{
-			JsonRpc: JsonRpcVersion,
-			Error:   NewJsonRpcError(ErrMethodNotFound, nil),
-			Id:      request.Id,
-		}
+		return jsonrpc.NewResponse(request.Id, nil, jsonrpc.NewError(jsonrpc.ErrMethodNotFound, nil))
 	}
 }
 
-func (s *Server) handleToolsList(request JsonRpcRequest) JsonRpcResponse {
+func (s *Server) handleToolsList(request jsonrpc.Request) jsonrpc.Response {
 	model, err := s.doc.BuildV3Model()
 	if err != nil {
-		return JsonRpcResponse{
-			JsonRpc: JsonRpcVersion,
-			Error:   NewJsonRpcError(ErrInternal, err),
-			Id:      request.Id,
-		}
+		return jsonrpc.NewResponse(request.Id, nil, jsonrpc.NewError(jsonrpc.ErrInternal, err))
 	}
 
 	tools := []Tool{}
@@ -75,41 +69,25 @@ func (s *Server) handleToolsList(request JsonRpcRequest) JsonRpcResponse {
 		}
 	}
 
-	return JsonRpcResponse{
-		JsonRpc: JsonRpcVersion,
-		Result:  ToolsListResponse{Tools: tools},
-		Id:      request.Id,
-	}
+	return jsonrpc.NewResponse(request.Id, ToolsListResponse{Tools: tools}, nil)
 }
 
-func (s *Server) handleToolsCall(request JsonRpcRequest) JsonRpcResponse {
+func (s *Server) handleToolsCall(request jsonrpc.Request) jsonrpc.Response {
 	var params ToolCallParams
 	if err := json.Unmarshal(request.Params, &params); err != nil {
-		return JsonRpcResponse{
-			JsonRpc: JsonRpcVersion,
-			Error:   NewJsonRpcError(ErrInvalidParams, err),
-			Id:      request.Id,
-		}
+		return jsonrpc.NewResponse(request.Id, nil, jsonrpc.NewError(jsonrpc.ErrInvalidParams, err))
 	}
 
 	model, errs := s.doc.BuildV3Model()
 	if errs != nil {
-		return JsonRpcResponse{
-			JsonRpc: JsonRpcVersion,
-			Error:   NewJsonRpcError(ErrInternal, errs),
-			Id:      request.Id,
-		}
+		return jsonrpc.NewResponse(request.Id, nil, jsonrpc.NewError(jsonrpc.ErrInternal, errs))
 	}
 
 	method, path, found := s.findOperation(&model.Model, params.Name)
 	if !found {
 		parts := strings.SplitN(params.Name, " ", 2)
 		if len(parts) != 2 {
-			return JsonRpcResponse{
-				JsonRpc: JsonRpcVersion,
-				Error:   NewJsonRpcError(ErrInvalidParams, "Invalid tool name format"),
-				Id:      request.Id,
-			}
+			return jsonrpc.NewResponse(request.Id, nil, jsonrpc.NewError(jsonrpc.ErrInvalidParams, "Invalid tool name format"))
 		}
 		method, path = parts[0], parts[1]
 	}
@@ -120,22 +98,14 @@ func (s *Server) handleToolsCall(request JsonRpcRequest) JsonRpcResponse {
 	if len(params.Parameters) > 0 && (method == "POST" || method == "PUT" || method == "PATCH") {
 		jsonBody, err := json.Marshal(params.Parameters)
 		if err != nil {
-			return JsonRpcResponse{
-				JsonRpc: JsonRpcVersion,
-				Error:   NewJsonRpcError(ErrInternal, err),
-				Id:      request.Id,
-			}
+			return jsonrpc.NewResponse(request.Id, nil, jsonrpc.NewError(jsonrpc.ErrInternal, err))
 		}
 		body = bytes.NewReader(jsonBody)
 	}
 
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
-		return JsonRpcResponse{
-			JsonRpc: JsonRpcVersion,
-			Error:   NewJsonRpcError(ErrInternal, err),
-			Id:      request.Id,
-		}
+		return jsonrpc.NewResponse(request.Id, nil, jsonrpc.NewError(jsonrpc.ErrInternal, err))
 	}
 
 	if body != nil {
@@ -144,21 +114,13 @@ func (s *Server) handleToolsCall(request JsonRpcRequest) JsonRpcResponse {
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return JsonRpcResponse{
-			JsonRpc: JsonRpcVersion,
-			Error:   NewJsonRpcError(ErrInternal, err),
-			Id:      request.Id,
-		}
+		return jsonrpc.NewResponse(request.Id, nil, jsonrpc.NewError(jsonrpc.ErrInternal, err))
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return JsonRpcResponse{
-			JsonRpc: JsonRpcVersion,
-			Error:   NewJsonRpcError(ErrInternal, err),
-			Id:      request.Id,
-		}
+		return jsonrpc.NewResponse(request.Id, nil, jsonrpc.NewError(jsonrpc.ErrInternal, err))
 	}
 
 	var result interface{}
@@ -166,11 +128,7 @@ func (s *Server) handleToolsCall(request JsonRpcRequest) JsonRpcResponse {
 		result = string(respBody)
 	}
 
-	return JsonRpcResponse{
-		JsonRpc: JsonRpcVersion,
-		Result:  result,
-		Id:      request.Id,
-	}
+	return jsonrpc.NewResponse(request.Id, result, nil)
 }
 
 func (s *Server) findOperation(model *v3.Document, operationId string) (method, path string, found bool) {

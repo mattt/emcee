@@ -8,12 +8,14 @@ import (
 
 	"github.com/pb33f/libopenapi"
 	"github.com/spf13/cobra"
+
+	"github.com/loopwork-ai/openapi-mcp/mcp"
 )
 
 var rootCmd = &cobra.Command{
 	Use:   "openapi-mcp [openapi-spec-url]",
-	Short: "OpenAPI MCP implements the stdio transport for MCP",
-	Long: `OpenAPI MCP is a CLI tool that implements the stdio transport for MCP.
+	Short: "An MCP server for a given OpenAPI specification",
+	Long: `OpenAPI MCP is a CLI tool that provides an MCP stdio transport for a given OpenAPI specification.
 It takes an OpenAPI specification URL as input and processes JSON-RPC requests
 from stdin, making corresponding API calls and returning JSON-RPC responses to stdout.`,
 	Args: cobra.ExactArgs(1),
@@ -24,8 +26,8 @@ from stdin, making corresponding API calls and returning JSON-RPC responses to s
 			return fmt.Errorf("error loading OpenAPI spec: %v", err)
 		}
 
-		server := NewServer(doc, specURL)
-		transport := NewTransport(server, os.Stdin, os.Stdout, os.Stderr)
+		server := mcp.NewServer(doc, specURL)
+		transport := mcp.NewStdioTransport(server, os.Stdin, os.Stdout, os.Stderr)
 		return transport.Run()
 	},
 }
@@ -47,6 +49,7 @@ func loadOpenAPISpec(url string) (libopenapi.Document, error) {
 
 func main() {
 	if err := rootCmd.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }

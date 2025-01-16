@@ -1,4 +1,4 @@
-module openapi-mcp
+module github.com/loopwork-ai/openapi-mcp
 
 go 1.21
 

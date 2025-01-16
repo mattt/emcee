@@ -1,4 +1,4 @@
-package main
+package mcp
 
 // ToolsListResponse represents the response for the tools/list method
 type ToolsListResponse struct {
