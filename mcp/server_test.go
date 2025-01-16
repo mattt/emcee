@@ -78,8 +78,7 @@ func setupTestServer(t *testing.T) (*Server, *httptest.Server) {
 	}
 
 	// Create a server instance with the test server URL
-	server := NewServer(doc, ts.URL)
-	server.client = ts.Client() // Use the test server's client
+	server := NewServer(doc, ts.URL, ts.Client())
 
 	return server, ts
 }

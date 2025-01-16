@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/pb33f/libopenapi"
 	"github.com/spf13/cobra"
@@ -20,20 +23,30 @@ It takes an OpenAPI specification URL as input and processes JSON-RPC requests
 from stdin, making corresponding API calls and returning JSON-RPC responses to stdout.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
+		defer cancel()
+
+		client := http.DefaultClient
+
 		specURL := args[0]
-		doc, err := loadOpenAPISpec(specURL)
+		doc, err := loadOpenAPISpec(ctx, specURL, client)
 		if err != nil {
 			return fmt.Errorf("error loading OpenAPI spec: %v", err)
 		}
 
-		server := mcp.NewServer(doc, specURL)
+		server := mcp.NewServer(doc, specURL, client)
 		transport := mcp.NewStdioTransport(server, os.Stdin, os.Stdout, os.Stderr)
-		return transport.Run(cmd.Context())
+		return transport.Run(ctx)
 	},
 }
 
-func loadOpenAPISpec(url string) (libopenapi.Document, error) {
-	resp, err := http.Get(url)
+func loadOpenAPISpec(ctx context.Context, url string, client *http.Client) (libopenapi.Document, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}

@@ -22,11 +22,11 @@ type Server struct {
 }
 
 // NewServer creates a new MCP server instance
-func NewServer(doc libopenapi.Document, baseURL string) *Server {
+func NewServer(doc libopenapi.Document, baseURL string, client *http.Client) *Server {
 	return &Server{
 		doc:     doc,
 		baseURL: strings.TrimSuffix(baseURL, "/openapi.json"),
-		client:  &http.Client{},
+		client:  client,
 	}
 }
 
