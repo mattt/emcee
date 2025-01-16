@@ -121,7 +121,7 @@ func TestTransport_Integration(t *testing.T) {
 	server := NewServer(doc, "http://test.api", http.DefaultClient)
 
 	// Test tools/list request
-	input := `{"jsonrpc": "2.0", "method": "tools/list", "id": 1}
+	input := `{"jsonrpc": "2.0", "method": "tools/list", "params": {}, "id": 1}
 `
 	in := strings.NewReader(input)
 	out := &bytes.Buffer{}

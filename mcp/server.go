@@ -95,8 +95,8 @@ func (s *Server) handleToolsCall(request jsonrpc.Request) jsonrpc.Response {
 	url := s.baseURL + path
 
 	var body io.Reader
-	if len(params.Parameters) > 0 && (method == "POST" || method == "PUT" || method == "PATCH") {
-		jsonBody, err := json.Marshal(params.Parameters)
+	if len(params.Arguments) > 0 && (method == "POST" || method == "PUT" || method == "PATCH") {
+		jsonBody, err := json.Marshal(params.Arguments)
 		if err != nil {
 			return jsonrpc.NewResponse(request.Id, nil, jsonrpc.NewError(jsonrpc.ErrInternal, err))
 		}
@@ -105,7 +105,7 @@ func (s *Server) handleToolsCall(request jsonrpc.Request) jsonrpc.Response {
 
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
-		return jsonrpc.NewResponse(request.Id, nil, jsonrpc.NewError(jsonrpc.ErrInternal, err))
+		return createResponse(request.Id, fmt.Sprintf("Error making request: %v", err), true)
 	}
 
 	if body != nil {
@@ -114,21 +114,48 @@ func (s *Server) handleToolsCall(request jsonrpc.Request) jsonrpc.Response {
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return jsonrpc.NewResponse(request.Id, nil, jsonrpc.NewError(jsonrpc.ErrInternal, err))
+		return createResponse(request.Id, fmt.Sprintf("Error making request: %v", err), true)
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return jsonrpc.NewResponse(request.Id, nil, jsonrpc.NewError(jsonrpc.ErrInternal, err))
+		return createResponse(request.Id, fmt.Sprintf("Error reading response: %v", err), true)
 	}
 
-	var result interface{}
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		result = string(respBody)
+	// Try to parse as JSON first
+	var jsonResult interface{}
+	if err := json.Unmarshal(respBody, &jsonResult); err != nil {
+		// If not JSON, return as plain text
+		return createResponse(request.Id, string(respBody), false)
 	}
 
-	return jsonrpc.NewResponse(request.Id, result, nil)
+	// For JSON responses, convert to string for better readability
+	jsonStr, err := json.MarshalIndent(jsonResult, "", "  ")
+	if err != nil {
+		jsonStr = respBody
+	}
+
+	return createResponse(request.Id, string(jsonStr), resp.StatusCode >= 400)
+}
+
+func createResponse(id interface{}, message string, isError bool) jsonrpc.Response {
+	return jsonrpc.NewResponse(id, CallToolResult{
+		Content: []interface{}{
+			TextContent{
+				Content: Content{
+					Type: "text",
+					Annotated: Annotated{
+						Annotations: &Annotations{
+							Audience: []Role{RoleAssistant},
+						},
+					},
+				},
+				Text: message,
+			},
+		},
+		IsError: isError,
+	}, nil)
 }
 
 func (s *Server) findOperation(model *v3.Document, operationId string) (method, path string, found bool) {
@@ -166,7 +193,11 @@ func createTool(method string, path string, operation *v3.Operation) Tool {
 		description = operation.Summary
 	}
 
-	parameters := make(map[string]interface{})
+	inputSchema := InputSchema{
+		Type:       "object",
+		Properties: make(map[string]interface{}),
+	}
+
 	if operation.RequestBody != nil && operation.RequestBody.Content != nil {
 		if mediaType, ok := operation.RequestBody.Content.Get("application/json"); ok && mediaType != nil {
 			if mediaType.Schema != nil {
@@ -181,11 +212,14 @@ func createTool(method string, path string, operation *v3.Operation) Tool {
 								if len(innerSchema.Type) > 0 {
 									schemaType = innerSchema.Type[0]
 								}
-								parameters[propName] = map[string]interface{}{
+								inputSchema.Properties[propName] = map[string]interface{}{
 									"type": schemaType,
 								}
 							}
 						}
+					}
+					if schema.Required != nil {
+						inputSchema.Required = schema.Required
 					}
 				}
 			}
@@ -195,6 +229,6 @@ func createTool(method string, path string, operation *v3.Operation) Tool {
 	return Tool{
 		Name:        name,
 		Description: description,
-		Parameters:  parameters,
+		InputSchema: inputSchema,
 	}
 }

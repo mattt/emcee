@@ -117,8 +117,8 @@ func TestHandleToolsList(t *testing.T) {
 	// Verify POST operation
 	assert.Equal(t, "createPet", postOp.Name)
 	assert.Equal(t, "Creates a new pet in the system", postOp.Description)
-	assert.Contains(t, postOp.Parameters, "name")
-	assert.Contains(t, postOp.Parameters, "age")
+	assert.Contains(t, postOp.InputSchema.Properties, "name")
+	assert.Contains(t, postOp.InputSchema.Properties, "age")
 }
 
 func TestHandleToolsCall(t *testing.T) {
@@ -138,24 +138,48 @@ func TestHandleToolsCall(t *testing.T) {
 				assert.Equal(t, 1, response.Id)
 				assert.Nil(t, response.Error)
 
-				result, ok := response.Result.([]interface{})
+				result, ok := response.Result.(CallToolResult)
 				assert.True(t, ok)
-				assert.Len(t, result, 2)
+				assert.Len(t, result.Content, 1)
+				assert.False(t, result.IsError)
+
+				content, ok := result.Content[0].(TextContent)
+				assert.True(t, ok)
+				assert.Equal(t, "text", content.Type)
+				assert.NotNil(t, content.Annotations)
+				assert.Contains(t, content.Annotations.Audience, RoleAssistant)
+
+				var pets []interface{}
+				err := json.Unmarshal([]byte(content.Text), &pets)
+				assert.NoError(t, err)
+				assert.Len(t, pets, 2)
 			},
 		},
 		{
 			name:    "POST request by operationId",
-			request: jsonrpc.NewRequest("tools/call", json.RawMessage(`{"name": "createPet", "parameters": {"name": "Whiskers", "age": 5}}`), 2),
+			request: jsonrpc.NewRequest("tools/call", json.RawMessage(`{"name": "createPet", "arguments": {"name": "Whiskers", "age": 5}}`), 2),
 			validate: func(t *testing.T, response jsonrpc.Response) {
 				assert.Equal(t, "2.0", response.Version)
 				assert.Equal(t, 2, response.Id)
 				assert.Nil(t, response.Error)
 
-				result, ok := response.Result.(map[string]interface{})
+				result, ok := response.Result.(CallToolResult)
 				assert.True(t, ok)
-				assert.Equal(t, "Whiskers", result["name"])
-				assert.Equal(t, float64(5), result["age"])
-				assert.Equal(t, float64(3), result["id"])
+				assert.Len(t, result.Content, 1)
+				assert.False(t, result.IsError)
+
+				content, ok := result.Content[0].(TextContent)
+				assert.True(t, ok)
+				assert.Equal(t, "text", content.Type)
+				assert.NotNil(t, content.Annotations)
+				assert.Contains(t, content.Annotations.Audience, RoleAssistant)
+
+				var pet map[string]interface{}
+				err := json.Unmarshal([]byte(content.Text), &pet)
+				assert.NoError(t, err)
+				assert.Equal(t, "Whiskers", pet["name"])
+				assert.Equal(t, float64(5), pet["age"])
+				assert.Equal(t, float64(3), pet["id"])
 			},
 		},
 		{
