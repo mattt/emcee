@@ -20,9 +20,9 @@ func NewID(id interface{}) (ID, error) {
 	case int, int32, int64, float32, float64:
 		return ID{value: v}, nil
 	case nil:
-		return ID{value: ""}, nil
+		return ID{}, fmt.Errorf("id cannot be null")
 	default:
-		return ID{value: ""}, fmt.Errorf("id must be string or number, got %T", id)
+		return ID{}, fmt.Errorf("id must be string or number, got %T", id)
 	}
 }
 
@@ -68,7 +68,12 @@ func (id ID) GoString() string {
 var _ json.Marshaler = ID{}
 
 func (id ID) MarshalJSON() ([]byte, error) {
-	return json.Marshal(id.value)
+	switch id.value {
+	case nil:
+		return json.Marshal(0)
+	default:
+		return json.Marshal(id.value)
+	}
 }
 
 var _ json.Unmarshaler = &ID{}
@@ -88,8 +93,7 @@ func (id *ID) UnmarshalJSON(data []byte) error {
 		id.value = int(v)
 		return nil
 	case nil:
-		id.value = ""
-		return nil
+		return fmt.Errorf("id cannot be null")
 	default:
 		return fmt.Errorf("id must be string or number, got %T", raw)
 	}
