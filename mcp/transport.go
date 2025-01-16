@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 
@@ -41,7 +42,10 @@ func (t *Transport) Run(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			if err := ctx.Err(); err != nil && !errors.Is(err, context.Canceled) {
+				return err
+			}
+			return nil
 		default:
 			if !t.scanner.Scan() {
 				if err := t.scanner.Err(); err != nil {

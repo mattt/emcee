@@ -1,5 +1,25 @@
 package mcp
 
+// ServerInfo represents information about the server implementation
+type ServerInfo struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+}
+
+// ServerCapabilities represents the server's supported capabilities
+type ServerCapabilities struct {
+	Tools struct {
+		ListChanged bool `json:"listChanged"`
+	} `json:"tools"`
+}
+
+// InitializeResponse represents the server's response to an initialize request
+type InitializeResponse struct {
+	ProtocolVersion string             `json:"protocolVersion"`
+	Capabilities    ServerCapabilities `json:"capabilities"`
+	ServerInfo      ServerInfo         `json:"serverInfo"`
+}
+
 // ToolsListResponse represents the response for the tools/list method
 type ToolsListResponse struct {
 	Tools []Tool `json:"tools"`

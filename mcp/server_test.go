@@ -10,6 +10,7 @@ import (
 	"github.com/loopwork-ai/openapi-mcp/jsonrpc"
 	"github.com/pb33f/libopenapi"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const testOpenAPISpec = `{
@@ -73,6 +74,8 @@ const testOpenAPISpec = `{
 }`
 
 func setupTestServer(t *testing.T) (*Server, *httptest.Server) {
+	t.Helper()
+
 	// Create a small test image
 	imgData := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A} // PNG header
 
@@ -108,6 +111,55 @@ func setupTestServer(t *testing.T) (*Server, *httptest.Server) {
 	server := NewServer(doc, ts.URL, ts.Client())
 
 	return server, ts
+}
+
+func TestServer_HandleInitialize(t *testing.T) {
+	server := NewServer(nil, "https://api.example.com", nil)
+
+	// Create a basic initialize request
+	request := jsonrpc.Request{
+		Version: "2.0",
+		Method:  "initialize",
+		Id:      1,
+		Params:  json.RawMessage(`{}`),
+	}
+
+	// Get the response
+	response := server.Handle(request)
+
+	// Assert no error
+	assert.Nil(t, response.Error)
+
+	// Parse the response result
+	var result InitializeResponse
+	resultBytes, err := json.Marshal(response.Result)
+	require.NoError(t, err)
+	err = json.Unmarshal(resultBytes, &result)
+	require.NoError(t, err)
+
+	// Verify the response structure
+	assert.Equal(t, "2024-11-05", result.ProtocolVersion)
+	assert.Equal(t, "openapi-mcp", result.ServerInfo.Name)
+	assert.Equal(t, "0.1.0", result.ServerInfo.Version)
+	assert.False(t, result.Capabilities.Tools.ListChanged)
+
+	// Verify JSON marshaling produces the expected format
+	jsonBytes, err := json.Marshal(result)
+	require.NoError(t, err)
+
+	var jsonMap map[string]interface{}
+	err = json.Unmarshal(jsonBytes, &jsonMap)
+	require.NoError(t, err)
+
+	// Verify the JSON structure matches the spec
+	assert.Equal(t, "2024-11-05", jsonMap["protocolVersion"])
+	serverInfo := jsonMap["serverInfo"].(map[string]interface{})
+	assert.Equal(t, "openapi-mcp", serverInfo["name"])
+	assert.Equal(t, "0.1.0", serverInfo["version"])
+
+	capabilities := jsonMap["capabilities"].(map[string]interface{})
+	tools := capabilities["tools"].(map[string]interface{})
+	assert.Equal(t, false, tools["listChanged"])
 }
 
 func TestHandleToolsList(t *testing.T) {

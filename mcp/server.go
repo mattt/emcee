@@ -34,6 +34,8 @@ func NewServer(doc libopenapi.Document, baseURL string, client *http.Client) *Se
 // Handle processes a single JSON-RPC request and returns a response
 func (s *Server) Handle(request jsonrpc.Request) jsonrpc.Response {
 	switch request.Method {
+	case "initialize":
+		return s.handleInitialize(request)
 	case "tools/list":
 		return s.handleToolsList(request)
 	case "tools/call":
@@ -41,6 +43,24 @@ func (s *Server) Handle(request jsonrpc.Request) jsonrpc.Response {
 	default:
 		return jsonrpc.NewResponse(request.Id, nil, jsonrpc.NewError(jsonrpc.ErrMethodNotFound, nil))
 	}
+}
+
+func (s *Server) handleInitialize(request jsonrpc.Request) jsonrpc.Response {
+	response := InitializeResponse{
+		ProtocolVersion: "2024-11-05",
+		Capabilities: ServerCapabilities{
+			Tools: struct {
+				ListChanged bool `json:"listChanged"`
+			}{
+				ListChanged: false,
+			},
+		},
+		ServerInfo: ServerInfo{
+			Name:    "openapi-mcp",
+			Version: "0.1.0",
+		},
+	}
+	return jsonrpc.NewResponse(request.Id, response, nil)
 }
 
 func (s *Server) handleToolsList(request jsonrpc.Request) jsonrpc.Response {
