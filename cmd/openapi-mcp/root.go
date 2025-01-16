@@ -38,7 +38,11 @@ from stdin, making corresponding API calls and returning JSON-RPC responses to s
 				return fmt.Errorf("error loading OpenAPI spec: %v", err)
 			}
 
-			server := mcp.NewServer(doc, specURL, client)
+			server, err := mcp.NewServer(doc, specURL, client)
+			if err != nil {
+				return fmt.Errorf("error creating server: %v", err)
+			}
+
 			transport := mcp.NewStdioTransport(server, os.Stdin, os.Stdout, os.Stderr)
 			return transport.Run(ctx)
 		})

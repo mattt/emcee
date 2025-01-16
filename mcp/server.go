@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,17 +19,40 @@ import (
 // Server represents an MCP server that processes JSON-RPC requests
 type Server struct {
 	doc     libopenapi.Document
+	model   *v3.Document
 	baseURL string
 	client  *http.Client
+	info    ServerInfo
 }
 
 // NewServer creates a new MCP server instance
-func NewServer(doc libopenapi.Document, baseURL string, client *http.Client) *Server {
+func NewServer(doc libopenapi.Document, baseURL string, client *http.Client) (*Server, error) {
+	model, errs := doc.BuildV3Model()
+	if errs != nil {
+		return nil, fmt.Errorf("failed to build OpenAPI model: %w", errors.Join(errs...))
+	}
+
+	info := ServerInfo{
+		Name:    "openapi-mcp",
+		Version: "0.1.0",
+	}
+
+	if model.Model.Info != nil {
+		if model.Model.Info.Title != "" {
+			info.Name = model.Model.Info.Title
+		}
+		if model.Model.Info.Version != "" {
+			info.Version = model.Model.Info.Version
+		}
+	}
+
 	return &Server{
 		doc:     doc,
+		model:   &model.Model,
 		baseURL: strings.TrimSuffix(baseURL, "/openapi.json"),
 		client:  client,
-	}
+		info:    info,
+	}, nil
 }
 
 // Handle processes a single JSON-RPC request and returns a response
@@ -55,10 +79,7 @@ func (s *Server) handleInitialize(request jsonrpc.Request) jsonrpc.Response {
 				ListChanged: false,
 			},
 		},
-		ServerInfo: ServerInfo{
-			Name:    "openapi-mcp",
-			Version: "0.1.0",
-		},
+		ServerInfo: s.info,
 	}
 	return jsonrpc.NewResponse(request.Id, response, nil)
 }

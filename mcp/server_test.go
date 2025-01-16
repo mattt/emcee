@@ -103,18 +103,21 @@ func setupTestServer(t *testing.T) (*Server, *httptest.Server) {
 
 	// Create a test OpenAPI document
 	doc, err := libopenapi.NewDocument([]byte(testOpenAPISpec))
-	if err != nil {
-		t.Fatalf("Failed to create test document: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Create a server instance with the test server URL
-	server := NewServer(doc, ts.URL, ts.Client())
+	server, err := NewServer(doc, ts.URL, ts.Client())
+	require.NoError(t, err)
 
 	return server, ts
 }
 
 func TestServer_HandleInitialize(t *testing.T) {
-	server := NewServer(nil, "https://api.example.com", nil)
+	// Test with OpenAPI spec that includes server info
+	doc, err := libopenapi.NewDocument([]byte(testOpenAPISpec))
+	require.NoError(t, err)
+	server, err := NewServer(doc, "https://api.example.com", nil)
+	require.NoError(t, err)
 
 	// Create a basic initialize request
 	request := jsonrpc.Request{
@@ -139,27 +142,31 @@ func TestServer_HandleInitialize(t *testing.T) {
 
 	// Verify the response structure
 	assert.Equal(t, "2024-11-05", result.ProtocolVersion)
-	assert.Equal(t, "openapi-mcp", result.ServerInfo.Name)
-	assert.Equal(t, "0.1.0", result.ServerInfo.Version)
+	assert.Equal(t, "Test API", result.ServerInfo.Name) // From testOpenAPISpec
+	assert.Equal(t, "1.0.0", result.ServerInfo.Version) // From testOpenAPISpec
 	assert.False(t, result.Capabilities.Tools.ListChanged)
 
-	// Verify JSON marshaling produces the expected format
-	jsonBytes, err := json.Marshal(result)
+	// Test with empty OpenAPI spec
+	emptySpec := `{
+		"openapi": "3.0.0",
+		"paths": {}
+	}`
+	docEmpty, err := libopenapi.NewDocument([]byte(emptySpec))
+	require.NoError(t, err)
+	serverEmpty, err := NewServer(docEmpty, "https://api.example.com", nil)
 	require.NoError(t, err)
 
-	var jsonMap map[string]interface{}
-	err = json.Unmarshal(jsonBytes, &jsonMap)
+	// Get response from empty spec server
+	responseEmpty := serverEmpty.Handle(request)
+	var resultEmpty InitializeResponse
+	resultBytes, err = json.Marshal(responseEmpty.Result)
+	require.NoError(t, err)
+	err = json.Unmarshal(resultBytes, &resultEmpty)
 	require.NoError(t, err)
 
-	// Verify the JSON structure matches the spec
-	assert.Equal(t, "2024-11-05", jsonMap["protocolVersion"])
-	serverInfo := jsonMap["serverInfo"].(map[string]interface{})
-	assert.Equal(t, "openapi-mcp", serverInfo["name"])
-	assert.Equal(t, "0.1.0", serverInfo["version"])
-
-	capabilities := jsonMap["capabilities"].(map[string]interface{})
-	tools := capabilities["tools"].(map[string]interface{})
-	assert.Equal(t, false, tools["listChanged"])
+	// Verify default values are used when spec info is missing
+	assert.Equal(t, "openapi-mcp", resultEmpty.ServerInfo.Name)
+	assert.Equal(t, "0.1.0", resultEmpty.ServerInfo.Version)
 }
 
 func TestHandleToolsList(t *testing.T) {

@@ -118,7 +118,8 @@ func TestTransport_Integration(t *testing.T) {
 	// Create a real server instance
 	doc, err := libopenapi.NewDocument(specData)
 	require.NoError(t, err)
-	server := NewServer(doc, "http://test.api", http.DefaultClient)
+	server, err := NewServer(doc, "http://test.api", http.DefaultClient)
+	require.NoError(t, err)
 
 	// Test tools/list request
 	input := `{"jsonrpc": "2.0", "method": "tools/list", "params": {}, "id": 1}
