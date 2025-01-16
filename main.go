@@ -1,8 +1,6 @@
 package main
 
 import (
-	"bufio"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -27,38 +25,8 @@ from stdin, making corresponding API calls and returning JSON-RPC responses to s
 		}
 
 		server := NewServer(doc, specURL)
-		reader := bufio.NewReader(os.Stdin)
-
-		for {
-			line, err := reader.ReadString('\n')
-			if err == io.EOF {
-				break
-			}
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error reading stdin: %v\n", err)
-				continue
-			}
-
-			var request JsonRpcRequest
-			if err := json.Unmarshal([]byte(line), &request); err != nil {
-				response := JsonRpcResponse{
-					JsonRpc: "2.0",
-					Error: &JsonRpcError{
-						Code:    -32700,
-						Message: "Parse error",
-						Data:    err,
-					},
-				}
-				json.NewEncoder(os.Stdout).Encode(response)
-				continue
-			}
-
-			response := server.HandleRequest(request)
-			if err := json.NewEncoder(os.Stdout).Encode(response); err != nil {
-				fmt.Fprintf(os.Stderr, "Error encoding response: %v\n", err)
-			}
-		}
-		return nil
+		transport := NewTransport(server, os.Stdin, os.Stdout, os.Stderr)
+		return transport.Run()
 	},
 }
 

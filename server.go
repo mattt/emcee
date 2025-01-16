@@ -12,6 +12,11 @@ import (
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 )
 
+// RequestHandler defines the interface for handling JSON-RPC requests
+type RequestHandler interface {
+	HandleRequest(request JsonRpcRequest) JsonRpcResponse
+}
+
 type JsonRpcRequest struct {
 	JsonRpc string          `json:"jsonrpc"`
 	Method  string          `json:"method"`
