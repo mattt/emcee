@@ -12,6 +12,7 @@ import (
 
 	"github.com/pb33f/libopenapi"
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
+	"github.com/spf13/cobra"
 )
 
 type JsonRpcRequest struct {
@@ -49,44 +50,53 @@ type ToolCallParams struct {
 	Parameters map[string]interface{} `json:"parameters"`
 }
 
-func main() {
-	if len(os.Args) != 2 {
-		fmt.Fprintf(os.Stderr, "Usage: %s <openapi-spec-url>\n", os.Args[0])
-		os.Exit(1)
-	}
-
-	specURL := os.Args[1]
-	doc, err := loadOpenAPISpec(specURL)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading OpenAPI spec: %v\n", err)
-		os.Exit(1)
-	}
-
-	reader := bufio.NewReader(os.Stdin)
-	for {
-		line, err := reader.ReadString('\n')
-		if err == io.EOF {
-			break
-		}
+var rootCmd = &cobra.Command{
+	Use:   "openapi-mcp [openapi-spec-url]",
+	Short: "OpenAPI MCP implements the stdio transport for MCP",
+	Long: `OpenAPI MCP is a CLI tool that implements the stdio transport for MCP.
+It takes an OpenAPI specification URL as input and processes JSON-RPC requests
+from stdin, making corresponding API calls and returning JSON-RPC responses to stdout.`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		specURL := args[0]
+		doc, err := loadOpenAPISpec(specURL)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading stdin: %v\n", err)
-			continue
+			return fmt.Errorf("error loading OpenAPI spec: %v", err)
 		}
 
-		var request JsonRpcRequest
-		if err := json.Unmarshal([]byte(line), &request); err != nil {
-			writeError(nil, -32700, "Parse error", err)
-			continue
-		}
+		reader := bufio.NewReader(os.Stdin)
+		for {
+			line, err := reader.ReadString('\n')
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error reading stdin: %v\n", err)
+				continue
+			}
 
-		switch request.Method {
-		case "tools/list":
-			handleToolsList(request, doc)
-		case "tools/call":
-			handleToolsCall(request, doc)
-		default:
-			writeError(request.Id, -32601, "Method not found", nil)
+			var request JsonRpcRequest
+			if err := json.Unmarshal([]byte(line), &request); err != nil {
+				writeError(nil, -32700, "Parse error", err)
+				continue
+			}
+
+			switch request.Method {
+			case "tools/list":
+				handleToolsList(request, doc)
+			case "tools/call":
+				handleToolsCall(request, doc)
+			default:
+				writeError(request.Id, -32601, "Method not found", nil)
+			}
 		}
+		return nil
+	},
+}
+
+func main() {
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(1)
 	}
 }
 
