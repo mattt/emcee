@@ -9,14 +9,14 @@ import (
 
 // Transport handles the communication between stdin/stdout and the MCP server
 type Transport struct {
-	handler RequestHandler
+	handler JsonRpcHandler
 	reader  *bufio.Reader
 	writer  *json.Encoder
 	errOut  io.Writer
 }
 
 // NewTransport creates a new Transport instance
-func NewTransport(handler RequestHandler, in io.Reader, out io.Writer, errOut io.Writer) *Transport {
+func NewTransport(handler JsonRpcHandler, in io.Reader, out io.Writer, errOut io.Writer) *Transport {
 	return &Transport{
 		handler: handler,
 		reader:  bufio.NewReader(in),

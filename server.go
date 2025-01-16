@@ -12,46 +12,6 @@ import (
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 )
 
-// RequestHandler defines the interface for handling JSON-RPC requests
-type RequestHandler interface {
-	HandleRequest(request JsonRpcRequest) JsonRpcResponse
-}
-
-type JsonRpcRequest struct {
-	JsonRpc string          `json:"jsonrpc"`
-	Method  string          `json:"method"`
-	Params  json.RawMessage `json:"params"`
-	Id      interface{}     `json:"id"`
-}
-
-type JsonRpcResponse struct {
-	JsonRpc string        `json:"jsonrpc"`
-	Result  interface{}   `json:"result,omitempty"`
-	Error   *JsonRpcError `json:"error,omitempty"`
-	Id      interface{}   `json:"id"`
-}
-
-type JsonRpcError struct {
-	Code    int         `json:"code"`
-	Message string      `json:"message"`
-	Data    interface{} `json:"data,omitempty"`
-}
-
-type ToolsListResponse struct {
-	Tools []Tool `json:"tools"`
-}
-
-type Tool struct {
-	Name        string                 `json:"name"`
-	Description string                 `json:"description"`
-	Parameters  map[string]interface{} `json:"parameters,omitempty"`
-}
-
-type ToolCallParams struct {
-	Name       string                 `json:"name"`
-	Parameters map[string]interface{} `json:"parameters"`
-}
-
 // Server represents an MCP server that processes JSON-RPC requests
 type Server struct {
 	doc     libopenapi.Document
