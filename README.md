@@ -45,8 +45,11 @@ emcee https://api.weather.gov/openapi.json
 Run the following command to build from source:
 
 ```console
-$ go build -o emcee cmd/emcee/main.go
+go build -o emcee cmd/emcee/main.go
 ```
+
+Once built, you can run in place (`./emcee`) or 
+move it somewhere in your `PATH`, like `/usr/local/bin`.
 
 [MCP]: https://modelcontextprotocol.io/
 [OpenAPI]: https://www.openapis.org
