@@ -3,6 +3,15 @@
 emcee is a CLI tool that provides an [MCP] stdio transport for a given [OpenAPI] specification.
 
 ```console
+Usage:
+  emcee [openapi-spec-url] [flags]
+
+Flags:
+      --auth string   Authorization header value (e.g. 'Bearer token123' or 'Basic dXNlcjpwYXNz')
+  -h, --help          help for emcee
+```
+
+```console
 emcee https://api.weather.gov/openapi.json
 ```
 
