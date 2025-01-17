@@ -3,7 +3,7 @@
 emcee is a CLI tool that provides an [MCP] stdio transport for a given [OpenAPI] specification.
 
 ```console
-$ emcee https://api.weather.gov/openapi.json
+emcee https://api.weather.gov/openapi.json
 ```
 
 <details>
@@ -13,6 +13,10 @@ $ emcee https://api.weather.gov/openapi.json
 ```json
 {"jsonrpc": "2.0", "method": "tools/list", "params": {}, "id": 1}
 ```
+
+</details>
+
+</details>
 
 <details>
 
