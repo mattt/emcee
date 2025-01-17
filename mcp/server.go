@@ -12,7 +12,7 @@ import (
 	"github.com/pb33f/libopenapi"
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 
-	"github.com/loopwork-ai/openapi-mcp/jsonrpc"
+	"github.com/loopwork-ai/emcee/jsonrpc"
 )
 
 // Server represents an MCP server that processes JSON-RPC requests

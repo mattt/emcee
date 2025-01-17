@@ -1,4 +1,4 @@
-module github.com/loopwork-ai/openapi-mcp
+module github.com/loopwork-ai/emcee
 
 go 1.21
 

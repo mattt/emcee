@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/loopwork-ai/openapi-mcp/jsonrpc"
+	"github.com/loopwork-ai/emcee/jsonrpc"
 )
 
 // Transport handles the communication between stdin/stdout and the MCP server
