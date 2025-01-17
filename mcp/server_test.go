@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/loopwork-ai/openapi-mcp/jsonrpc"
-	"github.com/pb33f/libopenapi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -82,6 +81,8 @@ func setupTestServer(t *testing.T) (*Server, *httptest.Server) {
 	// Create a test HTTP server
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case "/openapi.json":
+			w.Write([]byte(testOpenAPISpec))
 		case "/pets":
 			switch r.Method {
 			case "GET":
@@ -101,22 +102,30 @@ func setupTestServer(t *testing.T) (*Server, *httptest.Server) {
 		}
 	}))
 
-	// Create a test OpenAPI document
-	doc, err := libopenapi.NewDocument([]byte(testOpenAPISpec))
-	require.NoError(t, err)
-
 	// Create a server instance with the test server URL
-	server, err := NewServer(doc, ts.URL, ts.Client())
+	server, err := NewServer(
+		WithClient(ts.Client()),
+		WithServerInfo("Test API", "1.0.0"),
+		WithSpecURL(ts.URL+"/openapi.json"),
+	)
 	require.NoError(t, err)
 
 	return server, ts
 }
 
 func TestServer_HandleInitialize(t *testing.T) {
+	// Create a test HTTP server to serve the spec
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(testOpenAPISpec))
+	}))
+	defer ts.Close()
+
 	// Test with OpenAPI spec that includes server info
-	doc, err := libopenapi.NewDocument([]byte(testOpenAPISpec))
-	require.NoError(t, err)
-	server, err := NewServer(doc, "https://api.example.com", nil)
+	server, err := NewServer(
+		WithClient(http.DefaultClient),
+		WithServerInfo("Test API", "1.0.0"),
+		WithSpecURL(ts.URL),
+	)
 	require.NoError(t, err)
 
 	// Create a basic initialize request
@@ -148,9 +157,15 @@ func TestServer_HandleInitialize(t *testing.T) {
 		"openapi": "3.0.0",
 		"paths": {}
 	}`
-	docEmpty, err := libopenapi.NewDocument([]byte(emptySpec))
-	require.NoError(t, err)
-	serverEmpty, err := NewServer(docEmpty, "https://api.example.com", nil)
+	tsEmpty := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(emptySpec))
+	}))
+	defer tsEmpty.Close()
+
+	serverEmpty, err := NewServer(
+		WithClient(http.DefaultClient),
+		WithSpecURL(tsEmpty.URL),
+	)
 	require.NoError(t, err)
 
 	// Get response from empty spec server

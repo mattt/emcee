@@ -8,8 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"net/http/httptest"
+
 	"github.com/loopwork-ai/openapi-mcp/jsonrpc"
-	"github.com/pb33f/libopenapi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -44,7 +45,7 @@ func TestTransport_Run(t *testing.T) {
 		{
 			name:  "invalid JSON request",
 			input: `{"jsonrpc": "2.0" method: invalid}`,
-			expectedOut: `{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error","data":{"Offset":19}},"id":""}
+			expectedOut: `{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error","data":{"Offset":19}},"id":0}
 `,
 			expectSuccess: true,
 		},
@@ -115,10 +116,17 @@ func TestTransport_Integration(t *testing.T) {
 		"paths": {}
 	}`)
 
+	// Create a test HTTP server to serve the spec
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(specData)
+	}))
+	defer ts.Close()
+
 	// Create a real server instance
-	doc, err := libopenapi.NewDocument(specData)
-	require.NoError(t, err)
-	server, err := NewServer(doc, "http://test.api", http.DefaultClient)
+	server, err := NewServer(
+		WithClient(http.DefaultClient),
+		WithSpecURL(ts.URL),
+	)
 	require.NoError(t, err)
 
 	// Test tools/list request

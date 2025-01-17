@@ -1,15 +1,11 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"github.com/pb33f/libopenapi"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 
@@ -30,15 +26,15 @@ from stdin, making corresponding API calls and returning JSON-RPC responses to s
 		g, ctx := errgroup.WithContext(ctx)
 
 		g.Go(func() error {
-			client := http.DefaultClient
-
-			specURL := args[0]
-			doc, err := loadOpenAPISpec(ctx, specURL, client)
-			if err != nil {
-				return fmt.Errorf("error loading OpenAPI spec: %v", err)
+			opts := []mcp.ServerOption{
+				mcp.WithSpecURL(args[0]),
 			}
 
-			server, err := mcp.NewServer(doc, specURL, client)
+			if auth != "" {
+				opts = append(opts, mcp.WithAuth(auth))
+			}
+
+			server, err := mcp.NewServer(opts...)
 			if err != nil {
 				return fmt.Errorf("error creating server: %v", err)
 			}
@@ -51,24 +47,10 @@ from stdin, making corresponding API calls and returning JSON-RPC responses to s
 	},
 }
 
-func loadOpenAPISpec(ctx context.Context, url string, client *http.Client) (libopenapi.Document, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
+var auth string
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	specData, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	return libopenapi.NewDocument(specData)
+func init() {
+	rootCmd.Flags().StringVar(&auth, "auth", "", "Authorization header value (e.g. 'Bearer token123' or 'Basic dXNlcjpwYXNz')")
 }
 
 func main() {

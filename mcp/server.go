@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,41 +17,37 @@ import (
 
 // Server represents an MCP server that processes JSON-RPC requests
 type Server struct {
-	doc     libopenapi.Document
-	model   *v3.Document
-	baseURL string
-	client  *http.Client
-	info    ServerInfo
+	doc        libopenapi.Document
+	model      *v3.Document
+	baseURL    string
+	client     *http.Client
+	info       ServerInfo
+	authHeader string
 }
 
 // NewServer creates a new MCP server instance
-func NewServer(doc libopenapi.Document, baseURL string, client *http.Client) (*Server, error) {
-	model, errs := doc.BuildV3Model()
-	if errs != nil {
-		return nil, fmt.Errorf("failed to build OpenAPI model: %w", errors.Join(errs...))
+func NewServer(opts ...ServerOption) (*Server, error) {
+	s := &Server{
+		client: http.DefaultClient,
+		info: ServerInfo{
+			Name:    "openapi-mcp",
+			Version: "0.1.0",
+		},
 	}
 
-	info := ServerInfo{
-		Name:    "openapi-mcp",
-		Version: "0.1.0",
-	}
-
-	if model.Model.Info != nil {
-		if model.Model.Info.Title != "" {
-			info.Name = model.Model.Info.Title
-		}
-		if model.Model.Info.Version != "" {
-			info.Version = model.Model.Info.Version
+	// Apply options
+	for _, opt := range opts {
+		if err := opt(s); err != nil {
+			return nil, err
 		}
 	}
 
-	return &Server{
-		doc:     doc,
-		model:   &model.Model,
-		baseURL: strings.TrimSuffix(baseURL, "/openapi.json"),
-		client:  client,
-		info:    info,
-	}, nil
+	// Validate required fields
+	if s.doc == nil {
+		return nil, fmt.Errorf("OpenAPI spec URL is required")
+	}
+
+	return s, nil
 }
 
 // Handle processes a single JSON-RPC request and returns a response
@@ -114,6 +109,13 @@ func (s *Server) handleToolsList(request jsonrpc.Request) jsonrpc.Response {
 	return jsonrpc.NewResponse(request.ID, ToolsListResponse{Tools: tools}, nil)
 }
 
+// applyAuthHeaders applies authentication headers to the request based on the server's auth configuration
+func (s *Server) applyAuthHeaders(req *http.Request) {
+	if s.authHeader != "" {
+		req.Header.Set("Authorization", s.authHeader)
+	}
+}
+
 func (s *Server) handleToolsCall(request jsonrpc.Request) jsonrpc.Response {
 	var params ToolCallParams
 	if err := json.Unmarshal(request.Params, &params); err != nil {
@@ -149,6 +151,8 @@ func (s *Server) handleToolsCall(request jsonrpc.Request) jsonrpc.Response {
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
+
+	s.applyAuthHeaders(req)
 
 	resp, err := s.client.Do(req)
 	if err != nil {
