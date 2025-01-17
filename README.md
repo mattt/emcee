@@ -6,7 +6,7 @@ emcee is a CLI tool that provides an [MCP] stdio transport for a given [OpenAPI]
 emcee https://api.weather.gov/openapi.json
 ```
 
-<details>
+<details open>
 
 <summary>Request</summary>
 
@@ -18,7 +18,7 @@ emcee https://api.weather.gov/openapi.json
 
 </details>
 
-<details>
+<details open>
 
 <summary>Response</summary>
 
