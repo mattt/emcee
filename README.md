@@ -4,15 +4,15 @@ emcee is a CLI tool that provides an [MCP] stdio transport for a given [OpenAPI]
 
 ```console
 Usage:
-  emcee [openapi-spec-url] [flags]
+  emcee [spec-path-or-url] [flags]
 
 Flags:
       --auth string        Authorization header value (e.g. 'Bearer token123' or 'Basic dXNlcjpwYXNz')
-  -h, --help              help for emcee
-  -r, --rps int          Maximum requests per second (0 for no limit)
-      --retries int      Maximum number of retries for failed requests (default 3)
-      --timeout duration HTTP request timeout (default 60s)
-  -v, --verbose          Enable verbose logging to stderr
+  -h, --help               help for emcee
+      --retries int        Maximum number of retries for failed requests (default 3)
+  -r, --rps int            Maximum requests per second (0 for no limit)
+      --timeout duration   HTTP request timeout (default 1m0s)
+  -v, --verbose            Enable verbose logging to stderr
 ```
 
 ```console
