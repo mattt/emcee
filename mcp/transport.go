@@ -17,15 +17,15 @@ import (
 type Transport struct {
 	reader io.Reader
 	writer *json.Encoder
-	errOut io.Writer
+	logger io.Writer
 }
 
 // NewStdioTransport creates a new stdio transport
-func NewStdioTransport(in io.Reader, out io.Writer, errOut io.Writer) *Transport {
+func NewStdioTransport(in io.Reader, out io.Writer, logger io.Writer) *Transport {
 	return &Transport{
 		reader: in,
 		writer: json.NewEncoder(out),
-		errOut: errOut,
+		logger: logger,
 	}
 }
 
@@ -112,14 +112,14 @@ func (t *Transport) Run(ctx context.Context, handler func(jsonrpc.Request) jsonr
 				if err := json.Unmarshal([]byte(line), &request); err != nil {
 					response := jsonrpc.NewResponse(nil, nil, jsonrpc.NewError(jsonrpc.ErrParse, err))
 					if err := t.writeWithRetry(response); err != nil {
-						fmt.Fprintf(t.errOut, "Error encoding response: %v\n", err)
+						fmt.Fprintf(t.logger, "Error encoding response: %v\n", err)
 					}
 					continue
 				}
 
 				response := handler(request)
 				if err := t.writeWithRetry(response); err != nil {
-					fmt.Fprintf(t.errOut, "Error encoding response: %v\n", err)
+					fmt.Fprintf(t.logger, "Error encoding response: %v\n", err)
 				}
 			}
 		}

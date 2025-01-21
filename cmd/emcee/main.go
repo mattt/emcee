@@ -86,7 +86,7 @@ If "-" is provided as the argument, the OpenAPI specification will be read from 
 			}
 
 			if verbose {
-				opts = append(opts, mcp.WithVerbose(os.Stderr))
+				opts = append(opts, mcp.WithLogger(os.Stderr))
 			}
 
 			server, err := mcp.NewServer(opts...)

@@ -23,7 +23,7 @@ type Server struct {
 	client     *http.Client
 	info       ServerInfo
 	authHeader string
-	errOut     io.Writer
+	logger     io.Writer
 }
 
 // NewServer creates a new MCP server instance
@@ -53,16 +53,16 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 
 // Handle processes a single JSON-RPC request and returns a response
 func (s *Server) Handle(request jsonrpc.Request) jsonrpc.Response {
-	if s.errOut != nil {
+	if s.logger != nil {
 		reqJSON, _ := json.MarshalIndent(request, "", "  ")
-		fmt.Fprintf(s.errOut, "-> Request:\n%s\n", reqJSON)
+		fmt.Fprintf(s.logger, "-> Request:\n%s\n", reqJSON)
 	}
 
 	response := s.handleRequest(request)
 
-	if s.errOut != nil {
+	if s.logger != nil {
 		respJSON, _ := json.MarshalIndent(response, "", "  ")
-		fmt.Fprintf(s.errOut, "<- Response:\n%s\n", respJSON)
+		fmt.Fprintf(s.logger, "<- Response:\n%s\n", respJSON)
 	}
 
 	return response
@@ -171,24 +171,24 @@ func (s *Server) handleToolsCall(request jsonrpc.Request) jsonrpc.Response {
 
 	s.applyAuthHeaders(req)
 
-	if s.errOut != nil {
-		fmt.Fprintf(s.errOut, "Making HTTP %s request to %s\n", method, url)
+	if s.logger != nil {
+		fmt.Fprintf(s.logger, "Making HTTP %s request to %s\n", method, url)
 		if body != nil {
-			fmt.Fprintf(s.errOut, "Request body: %s\n", params.Arguments)
+			fmt.Fprintf(s.logger, "Request body: %s\n", params.Arguments)
 		}
 	}
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		if s.errOut != nil {
-			fmt.Fprintf(s.errOut, "HTTP request error: %v\n", err)
+		if s.logger != nil {
+			fmt.Fprintf(s.logger, "HTTP request error: %v\n", err)
 		}
 		return toolError(request.ID, fmt.Sprintf("Error making request: %v", err))
 	}
 	defer resp.Body.Close()
 
-	if s.errOut != nil {
-		fmt.Fprintf(s.errOut, "HTTP response status: %s\n", resp.Status)
+	if s.logger != nil {
+		fmt.Fprintf(s.logger, "HTTP response status: %s\n", resp.Status)
 	}
 
 	respBody, err := io.ReadAll(resp.Body)
@@ -317,10 +317,10 @@ func createTool(method string, path string, operation *v3.Operation) Tool {
 	}
 }
 
-// WithVerbose creates a new server option to enable verbose logging
-func WithVerbose(errOut io.Writer) ServerOption {
+// WithLogger creates a new server option to enable verbose logging
+func WithLogger(logger io.Writer) ServerOption {
 	return func(s *Server) error {
-		s.errOut = errOut
+		s.logger = logger
 		return nil
 	}
 }
