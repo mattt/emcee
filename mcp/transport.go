@@ -127,6 +127,7 @@ func (t *Transport) Run(ctx context.Context, handler func(jsonrpc.Request) jsonr
 			return err
 		}
 		defer cleanup()
+		defer close(lines)
 
 		buf := make([]byte, 1)
 		line := make([]byte, 0, 4096)
