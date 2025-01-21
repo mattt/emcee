@@ -20,7 +20,8 @@ func TestIntegration(t *testing.T) {
 	require.NoError(t, buildCmd.Run(), "Failed to build emcee binary")
 
 	// Start emcee with the embedded test OpenAPI spec
-	cmd := exec.Command(binaryPath, "testdata/openapi.json")
+	specPath := "testdata/api.weather.gov/openapi.json"
+	cmd := exec.Command(binaryPath, specPath)
 	stdin, err := cmd.StdinPipe()
 	require.NoError(t, err)
 	stdout, err := cmd.StdoutPipe()
