@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -65,7 +66,8 @@ func (t *Transport) Run(ctx context.Context, handler func(jsonrpc.Request) jsonr
 		}
 		defer cleanup()
 
-		buf := make([]byte, 0, 4096)
+		var buf bytes.Buffer
+		buf.Grow(4096)
 		for {
 			select {
 			case <-ctx.Done():
@@ -75,16 +77,15 @@ func (t *Transport) Run(ctx context.Context, handler func(jsonrpc.Request) jsonr
 					return nil
 				}
 
-				data, err := json.Marshal(response)
-				if err != nil {
+				buf.Reset()
+				enc := json.NewEncoder(&buf)
+				if err := enc.Encode(response); err != nil {
 					fmt.Fprintf(t.logger, "Error marshaling response: %v\n", err)
 					continue
 				}
-				buf = buf[:0]
-				buf = append(buf, data...)
-				buf = append(buf, '\n')
 
-				for len(buf) > 0 {
+				data := buf.Bytes()
+				for len(data) > 0 {
 					select {
 					case <-ctx.Done():
 						return nil
@@ -93,9 +94,9 @@ func (t *Transport) Run(ctx context.Context, handler func(jsonrpc.Request) jsonr
 						var err error
 
 						if fd != -1 {
-							n, err = unix.Write(fd, buf)
+							n, err = unix.Write(fd, data)
 						} else {
-							n, err = t.writer.Write(buf)
+							n, err = t.writer.Write(data)
 						}
 
 						if err != nil {
@@ -112,7 +113,7 @@ func (t *Transport) Run(ctx context.Context, handler func(jsonrpc.Request) jsonr
 							return nil
 						}
 
-						buf = buf[n:]
+						data = data[n:]
 					}
 				}
 			}
