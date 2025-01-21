@@ -10,7 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
+	"github.com/hashicorp/go-retryablehttp"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 
@@ -47,7 +49,25 @@ The spec-path-or-url argument can be:
 
 			opts = append(opts, mcp.WithLogger(logger))
 
-			client := &http.Client{}
+			retryClient := retryablehttp.NewClient()
+			retryClient.RetryMax = retries
+			retryClient.RetryWaitMin = 1 * time.Second
+			retryClient.RetryWaitMax = 30 * time.Second
+			retryClient.HTTPClient.Timeout = timeout
+			retryClient.Logger = logger
+
+			if rps > 0 {
+				retryClient.Backoff = func(min, max time.Duration, attemptNum int, resp *http.Response) time.Duration {
+					// Ensure we wait at least 1/rps between requests
+					minWait := time.Second / time.Duration(rps)
+					if min < minWait {
+						min = minWait
+					}
+					return retryablehttp.DefaultBackoff(min, max, attemptNum, resp)
+				}
+			}
+
+			client := retryClient.StandardClient()
 			opts = append(opts, mcp.WithClient(client))
 
 			var specData []byte
@@ -155,11 +175,17 @@ The spec-path-or-url argument can be:
 var (
 	auth    string
 	verbose bool
+	retries int
+	timeout time.Duration
+	rps     int
 )
 
 func init() {
 	rootCmd.Flags().StringVar(&auth, "auth", "", "Authorization header value (e.g. 'Bearer token123' or 'Basic dXNlcjpwYXNz')")
 	rootCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose logging to stderr")
+	rootCmd.Flags().IntVar(&retries, "retries", 3, "Maximum number of retries for failed requests")
+	rootCmd.Flags().DurationVar(&timeout, "timeout", 60*time.Second, "HTTP request timeout")
+	rootCmd.Flags().IntVarP(&rps, "rps", "r", 0, "Maximum requests per second (0 for no limit)")
 }
 
 func main() {
