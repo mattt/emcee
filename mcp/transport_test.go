@@ -113,6 +113,11 @@ func TestTransport_Integration(t *testing.T) {
 			"title": "Test API",
 			"version": "1.0.0"
 		},
+		"servers": [
+			{
+				"url": "http://api.example.com"
+			}
+		],
 		"paths": {}
 	}`)
 
@@ -125,7 +130,7 @@ func TestTransport_Integration(t *testing.T) {
 	// Create a real server instance
 	server, err := NewServer(
 		WithClient(http.DefaultClient),
-		WithSpecURL(ts.URL),
+		WithSpecData(specData),
 	)
 	require.NoError(t, err)
 
