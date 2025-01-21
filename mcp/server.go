@@ -23,6 +23,7 @@ type Server struct {
 	client     *http.Client
 	info       ServerInfo
 	authHeader string
+	errOut     io.Writer
 }
 
 // NewServer creates a new MCP server instance
@@ -52,6 +53,22 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 
 // Handle processes a single JSON-RPC request and returns a response
 func (s *Server) Handle(request jsonrpc.Request) jsonrpc.Response {
+	if s.errOut != nil {
+		reqJSON, _ := json.MarshalIndent(request, "", "  ")
+		fmt.Fprintf(s.errOut, "-> Request:\n%s\n", reqJSON)
+	}
+
+	response := s.handleRequest(request)
+
+	if s.errOut != nil {
+		respJSON, _ := json.MarshalIndent(response, "", "  ")
+		fmt.Fprintf(s.errOut, "<- Response:\n%s\n", respJSON)
+	}
+
+	return response
+}
+
+func (s *Server) handleRequest(request jsonrpc.Request) jsonrpc.Response {
 	switch request.Method {
 	case "initialize":
 		return s.handleInitialize(request)
@@ -154,11 +171,25 @@ func (s *Server) handleToolsCall(request jsonrpc.Request) jsonrpc.Response {
 
 	s.applyAuthHeaders(req)
 
+	if s.errOut != nil {
+		fmt.Fprintf(s.errOut, "Making HTTP %s request to %s\n", method, url)
+		if body != nil {
+			fmt.Fprintf(s.errOut, "Request body: %s\n", params.Arguments)
+		}
+	}
+
 	resp, err := s.client.Do(req)
 	if err != nil {
+		if s.errOut != nil {
+			fmt.Fprintf(s.errOut, "HTTP request error: %v\n", err)
+		}
 		return toolError(request.ID, fmt.Sprintf("Error making request: %v", err))
 	}
 	defer resp.Body.Close()
+
+	if s.errOut != nil {
+		fmt.Fprintf(s.errOut, "HTTP response status: %s\n", resp.Status)
+	}
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -283,5 +314,13 @@ func createTool(method string, path string, operation *v3.Operation) Tool {
 		Name:        name,
 		Description: description,
 		InputSchema: inputSchema,
+	}
+}
+
+// WithVerbose creates a new server option to enable verbose logging
+func WithVerbose(errOut io.Writer) ServerOption {
+	return func(s *Server) error {
+		s.errOut = errOut
+		return nil
 	}
 }

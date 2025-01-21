@@ -34,6 +34,10 @@ from stdin, making corresponding API calls and returning JSON-RPC responses to s
 				opts = append(opts, mcp.WithAuth(auth))
 			}
 
+			if verbose {
+				opts = append(opts, mcp.WithVerbose(os.Stderr))
+			}
+
 			server, err := mcp.NewServer(opts...)
 			if err != nil {
 				return fmt.Errorf("error creating server: %v", err)
@@ -47,10 +51,14 @@ from stdin, making corresponding API calls and returning JSON-RPC responses to s
 	},
 }
 
-var auth string
+var (
+	auth    string
+	verbose bool
+)
 
 func init() {
 	rootCmd.Flags().StringVar(&auth, "auth", "", "Authorization header value (e.g. 'Bearer token123' or 'Basic dXNlcjpwYXNz')")
+	rootCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose logging to stderr")
 }
 
 func main() {
