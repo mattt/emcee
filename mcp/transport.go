@@ -1,12 +1,12 @@
 package mcp
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/loopwork-ai/emcee/jsonrpc"
 	"golang.org/x/sync/errgroup"
@@ -17,17 +17,14 @@ import (
 type Transport struct {
 	reader io.Reader
 	writer *json.Encoder
-	bufOut *bufio.Writer
 	errOut io.Writer
 }
 
 // NewStdioTransport creates a new stdio transport
 func NewStdioTransport(in io.Reader, out io.Writer, errOut io.Writer) *Transport {
-	bufOut := bufio.NewWriter(out)
 	return &Transport{
 		reader: in,
-		writer: json.NewEncoder(bufOut),
-		bufOut: bufOut,
+		writer: json.NewEncoder(out),
 		errOut: errOut,
 	}
 }
@@ -40,7 +37,7 @@ func (t *Transport) Run(ctx context.Context, handler func(jsonrpc.Request) jsonr
 	g.Go(func() error {
 		defer close(lines)
 
-		// Setup non-blocking mode if we have a file descriptor
+		// Setup non-blocking mode for input if we have a file descriptor
 		var fd = -1
 		if f, ok := t.reader.(*os.File); ok {
 			fd = int(f.Fd())
@@ -114,21 +111,35 @@ func (t *Transport) Run(ctx context.Context, handler func(jsonrpc.Request) jsonr
 				var request jsonrpc.Request
 				if err := json.Unmarshal([]byte(line), &request); err != nil {
 					response := jsonrpc.NewResponse(nil, nil, jsonrpc.NewError(jsonrpc.ErrParse, err))
-					if err := t.writer.Encode(response); err != nil {
+					if err := t.writeWithRetry(response); err != nil {
 						fmt.Fprintf(t.errOut, "Error encoding response: %v\n", err)
 					}
-					t.bufOut.Flush()
 					continue
 				}
 
 				response := handler(request)
-				if err := t.writer.Encode(response); err != nil {
+				if err := t.writeWithRetry(response); err != nil {
 					fmt.Fprintf(t.errOut, "Error encoding response: %v\n", err)
 				}
-				t.bufOut.Flush()
 			}
 		}
 	})
 
 	return g.Wait()
+}
+
+func (t *Transport) writeWithRetry(response jsonrpc.Response) error {
+	for {
+		err := t.writer.Encode(response)
+		if err == nil {
+			return nil
+		}
+
+		if err != unix.EAGAIN {
+			return err
+		}
+
+		// If we get EAGAIN, sleep briefly and retry
+		time.Sleep(time.Millisecond)
+	}
 }
