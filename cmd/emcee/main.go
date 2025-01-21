@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -86,7 +87,10 @@ If "-" is provided as the argument, the OpenAPI specification will be read from 
 			}
 
 			if verbose {
-				opts = append(opts, mcp.WithLogger(os.Stderr))
+				logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+					Level: slog.LevelDebug,
+				}))
+				opts = append(opts, mcp.WithLogger(logger))
 			}
 
 			server, err := mcp.NewServer(opts...)

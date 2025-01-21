@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -23,15 +24,18 @@ type Server struct {
 	client     *http.Client
 	info       ServerInfo
 	authHeader string
-	logger     io.Writer
+	logger     *slog.Logger
 }
 
 // Start logs that the server is ready to accept requests
 func (s *Server) Start() {
 	if s.logger != nil {
-		fmt.Fprintf(s.logger, "MCP Server %s v%s started and ready to accept requests\n", s.info.Name, s.info.Version)
+		s.logger.Info("server started",
+			"name", s.info.Name,
+			"version", s.info.Version)
 		if s.baseURL != "" {
-			fmt.Fprintf(s.logger, "Server configured with base URL: %s\n", s.baseURL)
+			s.logger.Info("server configuration",
+				"base_url", s.baseURL)
 		}
 	}
 }
@@ -39,7 +43,7 @@ func (s *Server) Start() {
 // Shutdown logs that the server is shutting down
 func (s *Server) Shutdown() {
 	if s.logger != nil {
-		fmt.Fprintf(s.logger, "MCP Server shutting down\n")
+		s.logger.Info("server shutting down")
 	}
 }
 
@@ -66,7 +70,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 
 	if s.logger != nil {
-		fmt.Fprintf(s.logger, "MCP Server initialized with OpenAPI spec\n")
+		s.logger.Info("server initialized with OpenAPI spec")
 	}
 
 	return s, nil
@@ -76,24 +80,25 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 func (s *Server) Handle(request jsonrpc.Request) jsonrpc.Response {
 	if s.logger != nil {
 		reqJSON, _ := json.MarshalIndent(request, "", "  ")
-		fmt.Fprintf(s.logger, "-> Request:\n%s\n", reqJSON)
+		s.logger.Info("incoming request",
+			"request", string(reqJSON))
 	}
 
 	response := s.handleRequest(request)
 
 	if s.logger != nil {
 		respJSON, _ := json.MarshalIndent(response, "", "  ")
-		fmt.Fprintf(s.logger, "<- Response:\n%s\n", respJSON)
+		s.logger.Info("outgoing response",
+			"response", string(respJSON))
 	}
 
 	return response
 }
 
 func (s *Server) handleRequest(request jsonrpc.Request) jsonrpc.Response {
-	if s.logger != nil {
-		if request.Method != "" {
-			fmt.Fprintf(s.logger, "Processing request method: %s\n", request.Method)
-		}
+	if s.logger != nil && request.Method != "" {
+		s.logger.Info("processing request",
+			"method", request.Method)
 	}
 
 	switch request.Method {
@@ -105,7 +110,8 @@ func (s *Server) handleRequest(request jsonrpc.Request) jsonrpc.Response {
 		return s.handleToolsCall(request)
 	default:
 		if s.logger != nil {
-			fmt.Fprintf(s.logger, "Unknown method requested: %q\n", request.Method)
+			s.logger.Warn("unknown method requested",
+				"method", request.Method)
 		}
 		return jsonrpc.NewResponse(request.ID, nil, jsonrpc.NewError(jsonrpc.ErrMethodNotFound, nil))
 	}
@@ -128,13 +134,14 @@ func (s *Server) handleInitialize(request jsonrpc.Request) jsonrpc.Response {
 
 func (s *Server) handleToolsList(request jsonrpc.Request) jsonrpc.Response {
 	if s.logger != nil {
-		fmt.Fprintf(s.logger, "Building tools list from OpenAPI spec\n")
+		s.logger.Info("building tools list from OpenAPI spec")
 	}
 
 	model, err := s.doc.BuildV3Model()
 	if err != nil {
 		if s.logger != nil {
-			fmt.Fprintf(s.logger, "Error building OpenAPI model: %v\n", err)
+			s.logger.Error("failed to build OpenAPI model",
+				"error", err)
 		}
 		return jsonrpc.NewResponse(request.ID, nil, jsonrpc.NewError(jsonrpc.ErrInternal, err))
 	}
@@ -161,7 +168,8 @@ func (s *Server) handleToolsList(request jsonrpc.Request) jsonrpc.Response {
 	}
 
 	if s.logger != nil {
-		fmt.Fprintf(s.logger, "Found %d tools in OpenAPI spec\n", len(tools))
+		s.logger.Info("tools list built",
+			"count", len(tools))
 	}
 
 	return jsonrpc.NewResponse(request.ID, ToolsListResponse{Tools: tools}, nil)
@@ -177,16 +185,28 @@ func (s *Server) applyAuthHeaders(req *http.Request) {
 func (s *Server) handleToolsCall(request jsonrpc.Request) jsonrpc.Response {
 	var params ToolCallParams
 	if err := json.Unmarshal(request.Params, &params); err != nil {
+		if s.logger != nil {
+			s.logger.Error("failed to unmarshal tool call params",
+				"error", err)
+		}
 		return jsonrpc.NewResponse(request.ID, nil, jsonrpc.NewError(jsonrpc.ErrInvalidParams, err))
 	}
 
 	model, errs := s.doc.BuildV3Model()
 	if errs != nil {
+		if s.logger != nil {
+			s.logger.Error("failed to build OpenAPI model",
+				"error", errs)
+		}
 		return jsonrpc.NewResponse(request.ID, nil, jsonrpc.NewError(jsonrpc.ErrInternal, errs))
 	}
 
 	method, path, found := s.findOperation(&model.Model, params.Name)
 	if !found {
+		if s.logger != nil {
+			s.logger.Warn("operation not found",
+				"operation", params.Name)
+		}
 		return jsonrpc.NewResponse(request.ID, nil, jsonrpc.NewError(jsonrpc.ErrMethodNotFound, nil))
 	}
 
@@ -196,6 +216,10 @@ func (s *Server) handleToolsCall(request jsonrpc.Request) jsonrpc.Response {
 	if len(params.Arguments) > 0 && (method == "POST" || method == "PUT" || method == "PATCH") {
 		jsonBody, err := json.Marshal(params.Arguments)
 		if err != nil {
+			if s.logger != nil {
+				s.logger.Error("failed to marshal request body",
+					"error", err)
+			}
 			return jsonrpc.NewResponse(request.ID, nil, jsonrpc.NewError(jsonrpc.ErrInternal, err))
 		}
 		body = bytes.NewReader(jsonBody)
@@ -203,6 +227,10 @@ func (s *Server) handleToolsCall(request jsonrpc.Request) jsonrpc.Response {
 
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
+		if s.logger != nil {
+			s.logger.Error("failed to create HTTP request",
+				"error", err)
+		}
 		return toolError(request.ID, fmt.Sprintf("Error making request: %v", err))
 	}
 
@@ -213,23 +241,29 @@ func (s *Server) handleToolsCall(request jsonrpc.Request) jsonrpc.Response {
 	s.applyAuthHeaders(req)
 
 	if s.logger != nil {
-		fmt.Fprintf(s.logger, "Making HTTP %s request to %s\n", method, url)
+		s.logger.Info("making HTTP request",
+			"method", method,
+			"url", url,
+			"has_body", body != nil)
 		if body != nil {
-			fmt.Fprintf(s.logger, "Request body: %s\n", params.Arguments)
+			s.logger.Debug("request body",
+				"body", params.Arguments)
 		}
 	}
 
 	resp, err := s.client.Do(req)
 	if err != nil {
 		if s.logger != nil {
-			fmt.Fprintf(s.logger, "HTTP request error: %v\n", err)
+			s.logger.Error("HTTP request error",
+				"error", err)
 		}
 		return toolError(request.ID, fmt.Sprintf("Error making request: %v", err))
 	}
 	defer resp.Body.Close()
 
 	if s.logger != nil {
-		fmt.Fprintf(s.logger, "HTTP response status: %s\n", resp.Status)
+		s.logger.Info("HTTP response status",
+			"status", resp.Status)
 	}
 
 	respBody, err := io.ReadAll(resp.Body)
@@ -358,8 +392,8 @@ func createTool(method string, path string, operation *v3.Operation) Tool {
 	}
 }
 
-// WithLogger creates a new server option to enable verbose logging
-func WithLogger(logger io.Writer) ServerOption {
+// WithLogger creates a new server option to enable structured logging
+func WithLogger(logger *slog.Logger) ServerOption {
 	return func(s *Server) error {
 		s.logger = logger
 		return nil
