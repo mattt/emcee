@@ -1,12 +1,12 @@
 package mcp
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/loopwork-ai/emcee/jsonrpc"
 	"golang.org/x/sync/errgroup"
@@ -15,34 +15,29 @@ import (
 
 // Transport handles the communication between stdin/stdout and the MCP server
 type Transport struct {
-	handler jsonrpc.Handler
-	reader  io.Reader
-	writer  *json.Encoder
-	bufOut  *bufio.Writer
-	errOut  io.Writer
+	reader io.Reader
+	writer *json.Encoder
+	logger io.Writer
 }
 
 // NewStdioTransport creates a new stdio transport
-func NewStdioTransport(handler jsonrpc.Handler, in io.Reader, out io.Writer, errOut io.Writer) *Transport {
-	bufOut := bufio.NewWriter(out)
+func NewStdioTransport(in io.Reader, out io.Writer, logger io.Writer) *Transport {
 	return &Transport{
-		handler: handler,
-		reader:  in,
-		writer:  json.NewEncoder(bufOut),
-		bufOut:  bufOut,
-		errOut:  errOut,
+		reader: in,
+		writer: json.NewEncoder(out),
+		logger: logger,
 	}
 }
 
 // Run starts the transport loop, reading from stdin and writing to stdout
-func (t *Transport) Run(ctx context.Context) error {
+func (t *Transport) Run(ctx context.Context, handler func(jsonrpc.Request) jsonrpc.Response) error {
 	g, ctx := errgroup.WithContext(ctx)
 	lines := make(chan string)
 
 	g.Go(func() error {
 		defer close(lines)
 
-		// Setup non-blocking mode if we have a file descriptor
+		// Setup non-blocking mode for input if we have a file descriptor
 		var fd = -1
 		if f, ok := t.reader.(*os.File); ok {
 			fd = int(f.Fd())
@@ -116,21 +111,35 @@ func (t *Transport) Run(ctx context.Context) error {
 				var request jsonrpc.Request
 				if err := json.Unmarshal([]byte(line), &request); err != nil {
 					response := jsonrpc.NewResponse(nil, nil, jsonrpc.NewError(jsonrpc.ErrParse, err))
-					if err := t.writer.Encode(response); err != nil {
-						fmt.Fprintf(t.errOut, "Error encoding response: %v\n", err)
+					if err := t.writeWithRetry(response); err != nil {
+						fmt.Fprintf(t.logger, "Error encoding response: %v\n", err)
 					}
-					t.bufOut.Flush()
 					continue
 				}
 
-				response := t.handler.Handle(request)
-				if err := t.writer.Encode(response); err != nil {
-					fmt.Fprintf(t.errOut, "Error encoding response: %v\n", err)
+				response := handler(request)
+				if err := t.writeWithRetry(response); err != nil {
+					fmt.Fprintf(t.logger, "Error encoding response: %v\n", err)
 				}
-				t.bufOut.Flush()
 			}
 		}
 	})
 
 	return g.Wait()
+}
+
+func (t *Transport) writeWithRetry(response jsonrpc.Response) error {
+	for {
+		err := t.writer.Encode(response)
+		if err == nil {
+			return nil
+		}
+
+		if err != unix.EAGAIN {
+			return err
+		}
+
+		// If we get EAGAIN, sleep briefly and retry
+		time.Sleep(time.Millisecond)
+	}
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -86,7 +87,10 @@ If "-" is provided as the argument, the OpenAPI specification will be read from 
 			}
 
 			if verbose {
-				opts = append(opts, mcp.WithVerbose(os.Stderr))
+				logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+					Level: slog.LevelDebug,
+				}))
+				opts = append(opts, mcp.WithLogger(logger))
 			}
 
 			server, err := mcp.NewServer(opts...)
@@ -94,8 +98,8 @@ If "-" is provided as the argument, the OpenAPI specification will be read from 
 				return fmt.Errorf("error creating server: %w", err)
 			}
 
-			transport := mcp.NewStdioTransport(server, rpcInput, os.Stdout, os.Stderr)
-			return transport.Run(ctx)
+			transport := mcp.NewStdioTransport(rpcInput, os.Stdout, os.Stderr)
+			return transport.Run(ctx, server.Handle)
 		})
 
 		return g.Wait()

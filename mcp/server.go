@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -23,7 +24,27 @@ type Server struct {
 	client     *http.Client
 	info       ServerInfo
 	authHeader string
-	errOut     io.Writer
+	logger     *slog.Logger
+}
+
+// Start logs that the server is ready to accept requests
+func (s *Server) Start() {
+	if s.logger != nil {
+		s.logger.Info("server started",
+			"name", s.info.Name,
+			"version", s.info.Version)
+		if s.baseURL != "" {
+			s.logger.Info("server configuration",
+				"base_url", s.baseURL)
+		}
+	}
+}
+
+// Shutdown logs that the server is shutting down
+func (s *Server) Shutdown() {
+	if s.logger != nil {
+		s.logger.Info("server shutting down")
+	}
 }
 
 // NewServer creates a new MCP server instance
@@ -48,27 +69,38 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		return nil, fmt.Errorf("OpenAPI spec URL is required")
 	}
 
+	if s.logger != nil {
+		s.logger.Info("server initialized with OpenAPI spec")
+	}
+
 	return s, nil
 }
 
 // Handle processes a single JSON-RPC request and returns a response
 func (s *Server) Handle(request jsonrpc.Request) jsonrpc.Response {
-	if s.errOut != nil {
+	if s.logger != nil {
 		reqJSON, _ := json.MarshalIndent(request, "", "  ")
-		fmt.Fprintf(s.errOut, "-> Request:\n%s\n", reqJSON)
+		s.logger.Info("incoming request",
+			"request", string(reqJSON))
 	}
 
 	response := s.handleRequest(request)
 
-	if s.errOut != nil {
+	if s.logger != nil {
 		respJSON, _ := json.MarshalIndent(response, "", "  ")
-		fmt.Fprintf(s.errOut, "<- Response:\n%s\n", respJSON)
+		s.logger.Info("outgoing response",
+			"response", string(respJSON))
 	}
 
 	return response
 }
 
 func (s *Server) handleRequest(request jsonrpc.Request) jsonrpc.Response {
+	if s.logger != nil && request.Method != "" {
+		s.logger.Info("processing request",
+			"method", request.Method)
+	}
+
 	switch request.Method {
 	case "initialize":
 		return s.handleInitialize(request)
@@ -77,6 +109,10 @@ func (s *Server) handleRequest(request jsonrpc.Request) jsonrpc.Response {
 	case "tools/call":
 		return s.handleToolsCall(request)
 	default:
+		if s.logger != nil {
+			s.logger.Warn("unknown method requested",
+				"method", request.Method)
+		}
 		return jsonrpc.NewResponse(request.ID, nil, jsonrpc.NewError(jsonrpc.ErrMethodNotFound, nil))
 	}
 }
@@ -97,8 +133,16 @@ func (s *Server) handleInitialize(request jsonrpc.Request) jsonrpc.Response {
 }
 
 func (s *Server) handleToolsList(request jsonrpc.Request) jsonrpc.Response {
+	if s.logger != nil {
+		s.logger.Info("building tools list from OpenAPI spec")
+	}
+
 	model, err := s.doc.BuildV3Model()
 	if err != nil {
+		if s.logger != nil {
+			s.logger.Error("failed to build OpenAPI model",
+				"error", err)
+		}
 		return jsonrpc.NewResponse(request.ID, nil, jsonrpc.NewError(jsonrpc.ErrInternal, err))
 	}
 
@@ -123,6 +167,11 @@ func (s *Server) handleToolsList(request jsonrpc.Request) jsonrpc.Response {
 		}
 	}
 
+	if s.logger != nil {
+		s.logger.Info("tools list built",
+			"count", len(tools))
+	}
+
 	return jsonrpc.NewResponse(request.ID, ToolsListResponse{Tools: tools}, nil)
 }
 
@@ -136,16 +185,28 @@ func (s *Server) applyAuthHeaders(req *http.Request) {
 func (s *Server) handleToolsCall(request jsonrpc.Request) jsonrpc.Response {
 	var params ToolCallParams
 	if err := json.Unmarshal(request.Params, &params); err != nil {
+		if s.logger != nil {
+			s.logger.Error("failed to unmarshal tool call params",
+				"error", err)
+		}
 		return jsonrpc.NewResponse(request.ID, nil, jsonrpc.NewError(jsonrpc.ErrInvalidParams, err))
 	}
 
 	model, errs := s.doc.BuildV3Model()
 	if errs != nil {
+		if s.logger != nil {
+			s.logger.Error("failed to build OpenAPI model",
+				"error", errs)
+		}
 		return jsonrpc.NewResponse(request.ID, nil, jsonrpc.NewError(jsonrpc.ErrInternal, errs))
 	}
 
 	method, path, found := s.findOperation(&model.Model, params.Name)
 	if !found {
+		if s.logger != nil {
+			s.logger.Warn("operation not found",
+				"operation", params.Name)
+		}
 		return jsonrpc.NewResponse(request.ID, nil, jsonrpc.NewError(jsonrpc.ErrMethodNotFound, nil))
 	}
 
@@ -155,6 +216,10 @@ func (s *Server) handleToolsCall(request jsonrpc.Request) jsonrpc.Response {
 	if len(params.Arguments) > 0 && (method == "POST" || method == "PUT" || method == "PATCH") {
 		jsonBody, err := json.Marshal(params.Arguments)
 		if err != nil {
+			if s.logger != nil {
+				s.logger.Error("failed to marshal request body",
+					"error", err)
+			}
 			return jsonrpc.NewResponse(request.ID, nil, jsonrpc.NewError(jsonrpc.ErrInternal, err))
 		}
 		body = bytes.NewReader(jsonBody)
@@ -162,6 +227,10 @@ func (s *Server) handleToolsCall(request jsonrpc.Request) jsonrpc.Response {
 
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
+		if s.logger != nil {
+			s.logger.Error("failed to create HTTP request",
+				"error", err)
+		}
 		return toolError(request.ID, fmt.Sprintf("Error making request: %v", err))
 	}
 
@@ -171,24 +240,30 @@ func (s *Server) handleToolsCall(request jsonrpc.Request) jsonrpc.Response {
 
 	s.applyAuthHeaders(req)
 
-	if s.errOut != nil {
-		fmt.Fprintf(s.errOut, "Making HTTP %s request to %s\n", method, url)
+	if s.logger != nil {
+		s.logger.Info("making HTTP request",
+			"method", method,
+			"url", url,
+			"has_body", body != nil)
 		if body != nil {
-			fmt.Fprintf(s.errOut, "Request body: %s\n", params.Arguments)
+			s.logger.Debug("request body",
+				"body", params.Arguments)
 		}
 	}
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		if s.errOut != nil {
-			fmt.Fprintf(s.errOut, "HTTP request error: %v\n", err)
+		if s.logger != nil {
+			s.logger.Error("HTTP request error",
+				"error", err)
 		}
 		return toolError(request.ID, fmt.Sprintf("Error making request: %v", err))
 	}
 	defer resp.Body.Close()
 
-	if s.errOut != nil {
-		fmt.Fprintf(s.errOut, "HTTP response status: %s\n", resp.Status)
+	if s.logger != nil {
+		s.logger.Info("HTTP response status",
+			"status", resp.Status)
 	}
 
 	respBody, err := io.ReadAll(resp.Body)
@@ -317,10 +392,10 @@ func createTool(method string, path string, operation *v3.Operation) Tool {
 	}
 }
 
-// WithVerbose creates a new server option to enable verbose logging
-func WithVerbose(errOut io.Writer) ServerOption {
+// WithLogger creates a new server option to enable structured logging
+func WithLogger(logger *slog.Logger) ServerOption {
 	return func(s *Server) error {
-		s.errOut = errOut
+		s.logger = logger
 		return nil
 	}
 }
