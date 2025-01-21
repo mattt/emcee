@@ -178,6 +178,10 @@ var (
 	retries int
 	timeout time.Duration
 	rps     int
+
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
 )
 
 func init() {
@@ -186,6 +190,8 @@ func init() {
 	rootCmd.Flags().IntVar(&retries, "retries", 3, "Maximum number of retries for failed requests")
 	rootCmd.Flags().DurationVar(&timeout, "timeout", 60*time.Second, "HTTP request timeout")
 	rootCmd.Flags().IntVarP(&rps, "rps", "r", 0, "Maximum requests per second (0 for no limit)")
+
+	rootCmd.Version = fmt.Sprintf("%s (commit: %s, built at: %s)", version, commit, date)
 }
 
 func main() {
