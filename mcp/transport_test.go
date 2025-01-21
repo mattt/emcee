@@ -87,8 +87,8 @@ func TestTransport_Run(t *testing.T) {
 			errOut := &bytes.Buffer{}
 
 			// Create and run transport
-			transport := NewStdioTransport(mockServer, in, out, errOut)
-			err := transport.Run(context.Background())
+			transport := NewStdioTransport(in, out, errOut)
+			err := transport.Run(context.Background(), mockServer.Handle)
 
 			if tt.expectSuccess {
 				assert.NoError(t, err)
@@ -141,8 +141,8 @@ func TestTransport_Integration(t *testing.T) {
 	out := &bytes.Buffer{}
 	errOut := &bytes.Buffer{}
 
-	transport := NewStdioTransport(server, in, out, errOut)
-	err = transport.Run(context.Background())
+	transport := NewStdioTransport(in, out, errOut)
+	err = transport.Run(context.Background(), server.Handle)
 	require.NoError(t, err)
 
 	// Verify the response
@@ -167,8 +167,8 @@ func TestTransport_Integration(t *testing.T) {
 	out = &bytes.Buffer{}
 	errOut = &bytes.Buffer{}
 
-	transport = NewStdioTransport(server, in, out, errOut)
-	err = transport.Run(context.Background())
+	transport = NewStdioTransport(in, out, errOut)
+	err = transport.Run(context.Background(), server.Handle)
 	require.NoError(t, err)
 
 	// Verify the response
@@ -186,8 +186,8 @@ func TestTransport_Integration(t *testing.T) {
 	out = &bytes.Buffer{}
 	errOut = &bytes.Buffer{}
 
-	transport = NewStdioTransport(server, in, out, errOut)
-	err = transport.Run(context.Background())
+	transport = NewStdioTransport(in, out, errOut)
+	err = transport.Run(context.Background(), server.Handle)
 	require.NoError(t, err)
 
 	// Verify the response
@@ -206,8 +206,8 @@ func TestTransport_Integration(t *testing.T) {
 	out = &bytes.Buffer{}
 	errOut = &bytes.Buffer{}
 
-	transport = NewStdioTransport(server, in, out, errOut)
-	err = transport.Run(context.Background())
+	transport = NewStdioTransport(in, out, errOut)
+	err = transport.Run(context.Background(), server.Handle)
 	require.NoError(t, err)
 
 	// Verify the response
@@ -224,8 +224,8 @@ func TestTransport_Integration(t *testing.T) {
 	out = &bytes.Buffer{}
 	errOut = &bytes.Buffer{}
 
-	transport = NewStdioTransport(server, in, out, errOut)
-	err = transport.Run(context.Background())
+	transport = NewStdioTransport(in, out, errOut)
+	err = transport.Run(context.Background(), server.Handle)
 	require.NoError(t, err)
 
 	// Verify the response

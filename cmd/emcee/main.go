@@ -94,8 +94,8 @@ If "-" is provided as the argument, the OpenAPI specification will be read from 
 				return fmt.Errorf("error creating server: %w", err)
 			}
 
-			transport := mcp.NewStdioTransport(server, rpcInput, os.Stdout, os.Stderr)
-			return transport.Run(ctx)
+			transport := mcp.NewStdioTransport(rpcInput, os.Stdout, os.Stderr)
+			return transport.Run(ctx, server.Handle)
 		})
 
 		return g.Wait()

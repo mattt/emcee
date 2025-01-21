@@ -15,27 +15,25 @@ import (
 
 // Transport handles the communication between stdin/stdout and the MCP server
 type Transport struct {
-	handler jsonrpc.Handler
-	reader  io.Reader
-	writer  *json.Encoder
-	bufOut  *bufio.Writer
-	errOut  io.Writer
+	reader io.Reader
+	writer *json.Encoder
+	bufOut *bufio.Writer
+	errOut io.Writer
 }
 
 // NewStdioTransport creates a new stdio transport
-func NewStdioTransport(handler jsonrpc.Handler, in io.Reader, out io.Writer, errOut io.Writer) *Transport {
+func NewStdioTransport(in io.Reader, out io.Writer, errOut io.Writer) *Transport {
 	bufOut := bufio.NewWriter(out)
 	return &Transport{
-		handler: handler,
-		reader:  in,
-		writer:  json.NewEncoder(bufOut),
-		bufOut:  bufOut,
-		errOut:  errOut,
+		reader: in,
+		writer: json.NewEncoder(bufOut),
+		bufOut: bufOut,
+		errOut: errOut,
 	}
 }
 
 // Run starts the transport loop, reading from stdin and writing to stdout
-func (t *Transport) Run(ctx context.Context) error {
+func (t *Transport) Run(ctx context.Context, handler func(jsonrpc.Request) jsonrpc.Response) error {
 	g, ctx := errgroup.WithContext(ctx)
 	lines := make(chan string)
 
@@ -123,7 +121,7 @@ func (t *Transport) Run(ctx context.Context) error {
 					continue
 				}
 
-				response := t.handler.Handle(request)
+				response := handler(request)
 				if err := t.writer.Encode(response); err != nil {
 					fmt.Fprintf(t.errOut, "Error encoding response: %v\n", err)
 				}
