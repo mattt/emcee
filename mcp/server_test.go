@@ -18,6 +18,11 @@ const testOpenAPISpec = `{
     "title": "Test API",
     "version": "1.0.0"
   },
+  "servers": [
+    {
+      "url": "http://api.example.com"
+    }
+  ],
   "paths": {
     "/pets": {
       "get": {
@@ -72,6 +77,77 @@ const testOpenAPISpec = `{
   }
 }`
 
+func newTestSpec(serverURL string) []byte {
+	spec := map[string]interface{}{
+		"openapi": "3.0.0",
+		"info": map[string]interface{}{
+			"title":   "Test API",
+			"version": "1.0.0",
+		},
+		"servers": []map[string]interface{}{
+			{"url": serverURL},
+		},
+		"paths": map[string]interface{}{
+			"/pets": map[string]interface{}{
+				"get": map[string]interface{}{
+					"operationId": "listPets",
+					"summary":     "List all pets",
+					"description": "Returns all pets from the system",
+				},
+				"post": map[string]interface{}{
+					"operationId": "createPet",
+					"summary":     "Create a pet",
+					"description": "Creates a new pet in the system",
+					"requestBody": map[string]interface{}{
+						"required": true,
+						"content": map[string]interface{}{
+							"application/json": map[string]interface{}{
+								"schema": map[string]interface{}{
+									"type": "object",
+									"properties": map[string]interface{}{
+										"name": map[string]interface{}{
+											"type": "string",
+										},
+										"age": map[string]interface{}{
+											"type": "integer",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			"/pets/image": map[string]interface{}{
+				"get": map[string]interface{}{
+					"operationId": "getPetImage",
+					"summary":     "Get a pet's image",
+					"description": "Returns a pet's image in PNG format",
+					"responses": map[string]interface{}{
+						"200": map[string]interface{}{
+							"description": "A pet image",
+							"content": map[string]interface{}{
+								"image/png": map[string]interface{}{
+									"schema": map[string]interface{}{
+										"type":   "string",
+										"format": "binary",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	data, err := json.MarshalIndent(spec, "", "  ")
+	if err != nil {
+		panic(err)
+	}
+	return data
+}
+
 func setupTestServer(t *testing.T) (*Server, *httptest.Server) {
 	t.Helper()
 
@@ -106,7 +182,7 @@ func setupTestServer(t *testing.T) (*Server, *httptest.Server) {
 	server, err := NewServer(
 		WithClient(ts.Client()),
 		WithServerInfo("Test API", "1.0.0"),
-		WithSpecURL(ts.URL+"/openapi.json"),
+		WithSpecData(newTestSpec(ts.URL)),
 	)
 	require.NoError(t, err)
 
@@ -116,7 +192,7 @@ func setupTestServer(t *testing.T) (*Server, *httptest.Server) {
 func TestServer_HandleInitialize(t *testing.T) {
 	// Create a test HTTP server to serve the spec
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(testOpenAPISpec))
+		w.Write(newTestSpec(r.Host))
 	}))
 	defer ts.Close()
 
@@ -124,7 +200,7 @@ func TestServer_HandleInitialize(t *testing.T) {
 	server, err := NewServer(
 		WithClient(http.DefaultClient),
 		WithServerInfo("Test API", "1.0.0"),
-		WithSpecURL(ts.URL),
+		WithSpecData(newTestSpec(ts.URL)),
 	)
 	require.NoError(t, err)
 
@@ -148,23 +224,29 @@ func TestServer_HandleInitialize(t *testing.T) {
 
 	// Verify the response structure
 	assert.Equal(t, "2024-11-05", result.ProtocolVersion)
-	assert.Equal(t, "Test API", result.ServerInfo.Name) // From testOpenAPISpec
-	assert.Equal(t, "1.0.0", result.ServerInfo.Version) // From testOpenAPISpec
+	assert.Equal(t, "Test API", result.ServerInfo.Name)
+	assert.Equal(t, "1.0.0", result.ServerInfo.Version)
 	assert.False(t, result.Capabilities.Tools.ListChanged)
 
 	// Test with empty OpenAPI spec
-	emptySpec := `{
+	emptySpec := map[string]interface{}{
 		"openapi": "3.0.0",
-		"paths": {}
-	}`
+		"servers": []map[string]interface{}{
+			{"url": ts.URL},
+		},
+		"paths": map[string]interface{}{},
+	}
+	emptySpecData, err := json.Marshal(emptySpec)
+	require.NoError(t, err)
+
 	tsEmpty := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(emptySpec))
+		w.Write(emptySpecData)
 	}))
 	defer tsEmpty.Close()
 
 	serverEmpty, err := NewServer(
 		WithClient(http.DefaultClient),
-		WithSpecURL(tsEmpty.URL),
+		WithSpecData(emptySpecData),
 	)
 	require.NoError(t, err)
 
@@ -350,4 +432,84 @@ func TestHandleInvalidMethod(t *testing.T) {
 	assert.NotNil(t, response.Error)
 	assert.Equal(t, int(jsonrpc.ErrMethodNotFound), int(response.Error.Code))
 	assert.Equal(t, "Method not found", response.Error.Message)
+}
+
+func TestWithSpecData(t *testing.T) {
+	tests := []struct {
+		name    string
+		spec    string
+		wantErr bool
+		assert  func(*testing.T, *Server)
+	}{
+		{
+			name: "valid spec with servers",
+			spec: `{
+				"openapi": "3.0.0",
+				"info": {
+					"title": "Test API",
+					"version": "1.0.0"
+				},
+				"servers": [
+					{
+						"url": "https://api.example.com"
+					}
+				],
+				"paths": {}
+			}`,
+			assert: func(t *testing.T, s *Server) {
+				assert.Equal(t, "https://api.example.com", s.baseURL)
+			},
+		},
+		{
+			name:    "invalid spec",
+			spec:    `{"openapi": "3.0.0", "invalid": true`,
+			wantErr: true,
+		},
+		{
+			name: "spec without servers",
+			spec: `{
+				"openapi": "3.0.0",
+				"info": {
+					"title": "Test API",
+					"version": "1.0.0"
+				},
+				"paths": {}
+			}`,
+			wantErr: true,
+		},
+		{
+			name: "spec with empty server URL",
+			spec: `{
+				"openapi": "3.0.0",
+				"servers": [
+					{
+						"url": ""
+					}
+				],
+				"paths": {}
+			}`,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server, err := NewServer(WithSpecData([]byte(tt.spec)))
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.name == "spec without servers" {
+					assert.Contains(t, err.Error(), "must include at least one server URL")
+				}
+				return
+			}
+
+			assert.NoError(t, err)
+			assert.NotNil(t, server.doc)
+			assert.NotNil(t, server.model)
+
+			if tt.assert != nil {
+				tt.assert(t, server)
+			}
+		})
+	}
 }

@@ -1,9 +1,7 @@
 package mcp
 
 import (
-	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 
@@ -137,53 +135,6 @@ func NewImageContent(data string, mimeType string, audience []Role, priority *fl
 // ServerOption configures a Server
 type ServerOption func(*Server) error
 
-// WithSpecURL sets the OpenAPI spec URL and downloads the spec
-func WithSpecURL(url string) ServerOption {
-	return func(s *Server) error {
-		req, err := http.NewRequest(http.MethodGet, url, nil)
-		if err != nil {
-			return fmt.Errorf("error creating request: %w", err)
-		}
-
-		resp, err := s.client.Do(req)
-		if err != nil {
-			return fmt.Errorf("error downloading spec: %w", err)
-		}
-		defer resp.Body.Close()
-
-		specData, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return fmt.Errorf("error reading spec: %w", err)
-		}
-
-		doc, err := libopenapi.NewDocument(specData)
-		if err != nil {
-			return fmt.Errorf("error parsing spec: %w", err)
-		}
-
-		model, errs := doc.BuildV3Model()
-		if errs != nil {
-			return fmt.Errorf("error building model: %w", errors.Join(errs...))
-		}
-
-		s.doc = doc
-		s.model = &model.Model
-		s.baseURL = strings.TrimSuffix(url, "/openapi.json")
-
-		// Apply model info if available
-		if model.Model.Info != nil {
-			if model.Model.Info.Title != "" {
-				s.info.Name = model.Model.Info.Title
-			}
-			if model.Model.Info.Version != "" {
-				s.info.Version = model.Model.Info.Version
-			}
-		}
-
-		return nil
-	}
-}
-
 // WithAuth sets the authorization header
 func WithAuth(auth string) ServerOption {
 	return func(s *Server) error {
@@ -207,6 +158,32 @@ func WithServerInfo(name, version string) ServerOption {
 			Name:    name,
 			Version: version,
 		}
+		return nil
+	}
+}
+
+// WithSpecData sets the OpenAPI spec directly from bytes
+func WithSpecData(data []byte) ServerOption {
+	return func(s *Server) error {
+		doc, err := libopenapi.NewDocument(data)
+		if err != nil {
+			return fmt.Errorf("error parsing OpenAPI spec: %v", err)
+		}
+
+		s.doc = doc
+		model, errs := doc.BuildV3Model()
+		if len(errs) > 0 {
+			return fmt.Errorf("error building OpenAPI model: %v", errs[0])
+		}
+
+		s.model = &model.Model
+
+		// Require server URL information
+		if len(model.Model.Servers) == 0 || model.Model.Servers[0].URL == "" {
+			return fmt.Errorf("OpenAPI spec must include at least one server URL")
+		}
+		s.baseURL = strings.TrimSuffix(model.Model.Servers[0].URL, "/")
+
 		return nil
 	}
 }
