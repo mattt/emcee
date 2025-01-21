@@ -26,6 +26,23 @@ type Server struct {
 	logger     io.Writer
 }
 
+// Start logs that the server is ready to accept requests
+func (s *Server) Start() {
+	if s.logger != nil {
+		fmt.Fprintf(s.logger, "MCP Server %s v%s started and ready to accept requests\n", s.info.Name, s.info.Version)
+		if s.baseURL != "" {
+			fmt.Fprintf(s.logger, "Server configured with base URL: %s\n", s.baseURL)
+		}
+	}
+}
+
+// Shutdown logs that the server is shutting down
+func (s *Server) Shutdown() {
+	if s.logger != nil {
+		fmt.Fprintf(s.logger, "MCP Server shutting down\n")
+	}
+}
+
 // NewServer creates a new MCP server instance
 func NewServer(opts ...ServerOption) (*Server, error) {
 	s := &Server{
@@ -46,6 +63,10 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	// Validate required fields
 	if s.doc == nil {
 		return nil, fmt.Errorf("OpenAPI spec URL is required")
+	}
+
+	if s.logger != nil {
+		fmt.Fprintf(s.logger, "MCP Server initialized with OpenAPI spec\n")
 	}
 
 	return s, nil
@@ -69,6 +90,12 @@ func (s *Server) Handle(request jsonrpc.Request) jsonrpc.Response {
 }
 
 func (s *Server) handleRequest(request jsonrpc.Request) jsonrpc.Response {
+	if s.logger != nil {
+		if request.Method != "" {
+			fmt.Fprintf(s.logger, "Processing request method: %s\n", request.Method)
+		}
+	}
+
 	switch request.Method {
 	case "initialize":
 		return s.handleInitialize(request)
@@ -77,6 +104,9 @@ func (s *Server) handleRequest(request jsonrpc.Request) jsonrpc.Response {
 	case "tools/call":
 		return s.handleToolsCall(request)
 	default:
+		if s.logger != nil {
+			fmt.Fprintf(s.logger, "Unknown method requested: %q\n", request.Method)
+		}
 		return jsonrpc.NewResponse(request.ID, nil, jsonrpc.NewError(jsonrpc.ErrMethodNotFound, nil))
 	}
 }
@@ -97,8 +127,15 @@ func (s *Server) handleInitialize(request jsonrpc.Request) jsonrpc.Response {
 }
 
 func (s *Server) handleToolsList(request jsonrpc.Request) jsonrpc.Response {
+	if s.logger != nil {
+		fmt.Fprintf(s.logger, "Building tools list from OpenAPI spec\n")
+	}
+
 	model, err := s.doc.BuildV3Model()
 	if err != nil {
+		if s.logger != nil {
+			fmt.Fprintf(s.logger, "Error building OpenAPI model: %v\n", err)
+		}
 		return jsonrpc.NewResponse(request.ID, nil, jsonrpc.NewError(jsonrpc.ErrInternal, err))
 	}
 
@@ -121,6 +158,10 @@ func (s *Server) handleToolsList(request jsonrpc.Request) jsonrpc.Response {
 		if pathItem.Patch != nil {
 			tools = append(tools, createTool("PATCH", path, pathItem.Patch))
 		}
+	}
+
+	if s.logger != nil {
+		fmt.Fprintf(s.logger, "Found %d tools in OpenAPI spec\n", len(tools))
 	}
 
 	return jsonrpc.NewResponse(request.ID, ToolsListResponse{Tools: tools}, nil)
