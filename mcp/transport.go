@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -16,7 +17,7 @@ import (
 // Transport handles the communication between stdin/stdout and the MCP server
 type Transport struct {
 	reader io.Reader
-	writer *json.Encoder
+	writer io.Writer
 	logger io.Writer
 }
 
@@ -24,35 +25,116 @@ type Transport struct {
 func NewStdioTransport(in io.Reader, out io.Writer, logger io.Writer) *Transport {
 	return &Transport{
 		reader: in,
-		writer: json.NewEncoder(out),
+		writer: out,
 		logger: logger,
 	}
+}
+
+// setupNonBlockingFd duplicates a file descriptor and sets it to non-blocking mode
+func setupNonBlockingFd(f interface{}) (fd int, cleanup func() error, err error) {
+	file, ok := f.(*os.File)
+	if !ok {
+		return -1, func() error { return nil }, nil
+	}
+
+	fd, err = unix.Dup(int(file.Fd()))
+	if err != nil {
+		return -1, func() error { return nil }, fmt.Errorf("failed to duplicate file descriptor: %w", err)
+	}
+
+	cleanup = func() error { return unix.Close(fd) }
+
+	if err := unix.SetNonblock(fd, true); err != nil {
+		cleanup()
+		return -1, func() error { return nil }, fmt.Errorf("failed to set non-blocking mode: %w", err)
+	}
+
+	return fd, cleanup, nil
 }
 
 // Run starts the transport loop, reading from stdin and writing to stdout
 func (t *Transport) Run(ctx context.Context, handler func(jsonrpc.Request) jsonrpc.Response) error {
 	g, ctx := errgroup.WithContext(ctx)
 	lines := make(chan string)
+	responses := make(chan jsonrpc.Response)
 
+	// Writer goroutine
 	g.Go(func() error {
-		defer close(lines)
-
-		// Setup non-blocking mode for input if we have a file descriptor
-		var fd = -1
-		if f, ok := t.reader.(*os.File); ok {
-			fd = int(f.Fd())
-			if err := unix.SetNonblock(fd, true); err != nil {
-				return fmt.Errorf("failed to set non-blocking mode: %v", err)
-			}
+		fd, cleanup, err := setupNonBlockingFd(t.writer)
+		if err != nil {
+			return err
 		}
+		defer cleanup()
 
-		var line []byte
-		buf := make([]byte, 1)
-
+		var buf bytes.Buffer
+		buf.Grow(4096)
 		for {
 			select {
 			case <-ctx.Done():
-				return nil // Return nil on context cancellation
+				return nil
+			case response, ok := <-responses:
+				if !ok {
+					return nil
+				}
+
+				buf.Reset()
+				enc := json.NewEncoder(&buf)
+				if err := enc.Encode(response); err != nil {
+					fmt.Fprintf(t.logger, "Error marshaling response: %v\n", err)
+					continue
+				}
+
+				data := buf.Bytes()
+				for len(data) > 0 {
+					select {
+					case <-ctx.Done():
+						return nil
+					default:
+						var n int
+						var err error
+
+						if fd != -1 {
+							n, err = unix.Write(fd, data)
+						} else {
+							n, err = t.writer.Write(data)
+						}
+
+						if err != nil {
+							if fd != -1 && err == unix.EAGAIN {
+								time.Sleep(time.Millisecond)
+								continue
+							}
+							if err == io.EOF {
+								return nil
+							}
+							return err
+						}
+						if n == 0 {
+							return nil
+						}
+
+						data = data[n:]
+					}
+				}
+			}
+		}
+	})
+
+	// Reader goroutine
+	g.Go(func() error {
+		fd, cleanup, err := setupNonBlockingFd(t.reader)
+		if err != nil {
+			return err
+		}
+		defer cleanup()
+		defer close(lines)
+
+		buf := make([]byte, 1)
+		line := make([]byte, 0, 4096)
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
 			default:
 				var n int
 				var err error
@@ -65,23 +147,23 @@ func (t *Transport) Run(ctx context.Context, handler func(jsonrpc.Request) jsonr
 
 				if err != nil {
 					if fd != -1 && err == unix.EAGAIN {
+						time.Sleep(time.Millisecond)
 						continue
 					}
 					if err == io.EOF {
-						return nil // Return nil on EOF
+						return nil
 					}
 					return err
 				}
 				if n == 0 {
-					return nil // Return nil on EOF (n == 0)
+					return nil
 				}
 
-				// Handle newlines
 				if buf[0] == '\n' || buf[0] == '\r' {
 					if len(line) > 0 {
 						select {
 						case <-ctx.Done():
-							return nil // Return nil on context cancellation
+							return nil
 						case lines <- string(line):
 							line = line[:0]
 						}
@@ -89,17 +171,18 @@ func (t *Transport) Run(ctx context.Context, handler func(jsonrpc.Request) jsonr
 					continue
 				}
 
-				// Build the line
 				line = append(line, buf[0])
 			}
 		}
 	})
 
+	// Handler goroutine
 	g.Go(func() error {
+		defer close(responses)
 		for {
 			select {
 			case <-ctx.Done():
-				return nil // Return nil on context cancellation
+				return nil
 			case line, ok := <-lines:
 				if !ok {
 					return nil
@@ -111,35 +194,23 @@ func (t *Transport) Run(ctx context.Context, handler func(jsonrpc.Request) jsonr
 				var request jsonrpc.Request
 				if err := json.Unmarshal([]byte(line), &request); err != nil {
 					response := jsonrpc.NewResponse(nil, nil, jsonrpc.NewError(jsonrpc.ErrParse, err))
-					if err := t.writeWithRetry(response); err != nil {
-						fmt.Fprintf(t.logger, "Error encoding response: %v\n", err)
+					select {
+					case <-ctx.Done():
+						return nil
+					case responses <- response:
 					}
 					continue
 				}
 
 				response := handler(request)
-				if err := t.writeWithRetry(response); err != nil {
-					fmt.Fprintf(t.logger, "Error encoding response: %v\n", err)
+				select {
+				case <-ctx.Done():
+					return nil
+				case responses <- response:
 				}
 			}
 		}
 	})
 
 	return g.Wait()
-}
-
-func (t *Transport) writeWithRetry(response jsonrpc.Response) error {
-	for {
-		err := t.writer.Encode(response)
-		if err == nil {
-			return nil
-		}
-
-		if err != unix.EAGAIN {
-			return err
-		}
-
-		// If we get EAGAIN, sleep briefly and retry
-		time.Sleep(time.Millisecond)
-	}
 }
