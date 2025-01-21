@@ -65,6 +65,7 @@ func (t *Transport) Run(ctx context.Context, handler func(jsonrpc.Request) jsonr
 		}
 		defer cleanup()
 
+		buf := make([]byte, 0, 4096)
 		for {
 			select {
 			case <-ctx.Done():
@@ -79,27 +80,40 @@ func (t *Transport) Run(ctx context.Context, handler func(jsonrpc.Request) jsonr
 					fmt.Fprintf(t.logger, "Error marshaling response: %v\n", err)
 					continue
 				}
-				data = append(data, '\n')
+				buf = buf[:0]
+				buf = append(buf, data...)
+				buf = append(buf, '\n')
 
-				for len(data) > 0 {
-					var n int
-					var err error
+				for len(buf) > 0 {
+					select {
+					case <-ctx.Done():
+						return nil
+					default:
+						var n int
+						var err error
 
-					if fd != -1 {
-						n, err = unix.Write(fd, data)
-					} else {
-						n, err = t.writer.Write(data)
-					}
-
-					if err != nil {
-						if fd != -1 && err == unix.EAGAIN {
-							time.Sleep(time.Millisecond)
-							continue
+						if fd != -1 {
+							n, err = unix.Write(fd, buf)
+						} else {
+							n, err = t.writer.Write(buf)
 						}
-						return err
-					}
 
-					data = data[n:]
+						if err != nil {
+							if fd != -1 && err == unix.EAGAIN {
+								time.Sleep(time.Millisecond)
+								continue
+							}
+							if err == io.EOF {
+								return nil
+							}
+							return err
+						}
+						if n == 0 {
+							return nil
+						}
+
+						buf = buf[n:]
+					}
 				}
 			}
 		}
@@ -107,21 +121,18 @@ func (t *Transport) Run(ctx context.Context, handler func(jsonrpc.Request) jsonr
 
 	// Reader goroutine
 	g.Go(func() error {
-		defer close(lines)
-
 		fd, cleanup, err := setupNonBlockingFd(t.reader)
 		if err != nil {
 			return err
 		}
 		defer cleanup()
 
-		var line []byte
 		buf := make([]byte, 1)
-
+		line := make([]byte, 0, 4096)
 		for {
 			select {
 			case <-ctx.Done():
-				return nil // Return nil on context cancellation
+				return nil
 			default:
 				var n int
 				var err error
@@ -134,23 +145,23 @@ func (t *Transport) Run(ctx context.Context, handler func(jsonrpc.Request) jsonr
 
 				if err != nil {
 					if fd != -1 && err == unix.EAGAIN {
+						time.Sleep(time.Millisecond)
 						continue
 					}
 					if err == io.EOF {
-						return nil // Return nil on EOF
+						return nil
 					}
 					return err
 				}
 				if n == 0 {
-					return nil // Return nil on EOF (n == 0)
+					return nil
 				}
 
-				// Handle newlines
 				if buf[0] == '\n' || buf[0] == '\r' {
 					if len(line) > 0 {
 						select {
 						case <-ctx.Done():
-							return nil // Return nil on context cancellation
+							return nil
 						case lines <- string(line):
 							line = line[:0]
 						}
@@ -158,7 +169,6 @@ func (t *Transport) Run(ctx context.Context, handler func(jsonrpc.Request) jsonr
 					continue
 				}
 
-				// Build the line
 				line = append(line, buf[0])
 			}
 		}
@@ -170,7 +180,7 @@ func (t *Transport) Run(ctx context.Context, handler func(jsonrpc.Request) jsonr
 		for {
 			select {
 			case <-ctx.Done():
-				return nil // Return nil on context cancellation
+				return nil
 			case line, ok := <-lines:
 				if !ok {
 					return nil
