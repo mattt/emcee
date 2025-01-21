@@ -1,8 +1,6 @@
 module github.com/loopwork-ai/emcee
 
-go 1.23.0
-
-toolchain go1.23.3
+go 1.23.3
 
 require (
 	github.com/pb33f/libopenapi v0.20.0
