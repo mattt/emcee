@@ -7,8 +7,12 @@ Usage:
   emcee [openapi-spec-url] [flags]
 
 Flags:
-      --auth string   Authorization header value (e.g. 'Bearer token123' or 'Basic dXNlcjpwYXNz')
-  -h, --help          help for emcee
+      --auth string        Authorization header value (e.g. 'Bearer token123' or 'Basic dXNlcjpwYXNz')
+  -h, --help              help for emcee
+  -r, --rps int          Maximum requests per second (0 for no limit)
+      --retries int      Maximum number of retries for failed requests (default 3)
+      --timeout duration HTTP request timeout (default 60s)
+  -v, --verbose          Enable verbose logging to stderr
 ```
 
 ```console
