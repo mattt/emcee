@@ -95,10 +95,6 @@ type Server struct {
 func NewServer(opts ...ServerOption) (*Server, error) {
 	s := &Server{
 		client: http.DefaultClient,
-		info: ServerInfo{
-			Name:    "emcee",
-			Version: "0.1.0",
-		},
 	}
 
 	// Apply options
