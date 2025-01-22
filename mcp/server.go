@@ -360,9 +360,9 @@ func (s *Server) handleToolsCall(request *ToolCallRequest) (*ToolCallResponse, e
 				if value, ok := request.Arguments[param.Name]; ok {
 					switch param.In {
 					case "path":
-						// Replace the parameter placeholder directly without escaping
-						// The value will already be properly escaped by url.URL when the final URL is constructed
-						u.Path = strings.ReplaceAll(u.Path, "{"+param.Name+"}", fmt.Sprint(value))
+						// Only escape characters that are invalid in URL path segments
+						value := fmt.Sprint(value)
+						u.Path = strings.ReplaceAll(u.Path, "{"+param.Name+"}", pathSegmentEscape(value))
 					case "query":
 						queryParams.Set(param.Name, fmt.Sprint(value))
 					case "header":
@@ -380,9 +380,9 @@ func (s *Server) handleToolsCall(request *ToolCallRequest) (*ToolCallResponse, e
 				if value, ok := request.Arguments[param.Name]; ok {
 					switch param.In {
 					case "path":
-						// Replace the parameter placeholder directly without escaping
-						// The value will already be properly escaped by url.URL when the final URL is constructed
-						u.Path = strings.ReplaceAll(u.Path, "{"+param.Name+"}", fmt.Sprint(value))
+						// Only escape characters that are invalid in URL path segments
+						value := fmt.Sprint(value)
+						u.Path = strings.ReplaceAll(u.Path, "{"+param.Name+"}", pathSegmentEscape(value))
 					case "query":
 						queryParams.Set(param.Name, fmt.Sprint(value))
 					case "header":
@@ -518,4 +518,61 @@ func (s *Server) findOperation(model *v3.Document, operationId string) (method, 
 		}
 	}
 	return "", "", nil, nil, false
+}
+
+// pathSegmentEscape escapes invalid URL path segment characters according to RFC 3986.
+// It preserves valid path characters including comma, colon, and @ sign.
+func pathSegmentEscape(s string) string {
+	// RFC 3986 section 3.3 defines path segment characters:
+	// segment       = *pchar
+	// pchar         = unreserved / pct-encoded / sub-delims / ":" / "@"
+	// unreserved    = ALPHA / DIGIT / "-" / "." / "_" / "~"
+	// sub-delims    = "!" / "$" / "&" / "'" / "(" / ")" / "*" / "+" / "," / ";" / "="
+	hexCount := 0
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if shouldEscape(c) {
+			hexCount++
+		}
+	}
+
+	if hexCount == 0 {
+		return s
+	}
+
+	var buf [3]byte
+	t := make([]byte, len(s)+2*hexCount)
+	j := 0
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if shouldEscape(c) {
+			buf[0] = '%'
+			buf[1] = "0123456789ABCDEF"[c>>4]
+			buf[2] = "0123456789ABCDEF"[c&15]
+			t[j] = buf[0]
+			t[j+1] = buf[1]
+			t[j+2] = buf[2]
+			j += 3
+		} else {
+			t[j] = c
+			j++
+		}
+	}
+	return string(t)
+}
+
+// shouldEscape reports whether the byte c should be escaped.
+// It follows RFC 3986 section 3.3 path segment rules.
+func shouldEscape(c byte) bool {
+	// RFC 3986 section 2.3 Unreserved Characters (and some sub-delims)
+	if 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9' {
+		return false
+	}
+	switch c {
+	case '-', '.', '_', '~': // unreserved
+		return false
+	case '!', '$', '&', '\'', '(', ')', '*', '+', ',', ';', '=', ':', '@': // sub-delims + ':' + '@'
+		return false
+	}
+	return true
 }
