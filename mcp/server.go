@@ -21,14 +21,6 @@ import (
 // ServerOption configures a Server
 type ServerOption func(*Server) error
 
-// WithAuth sets the HTTP Authorization header
-func WithAuth(auth string) ServerOption {
-	return func(s *Server) error {
-		s.authHeader = auth
-		return nil
-	}
-}
-
 // WithClient sets the HTTP client
 func WithClient(client *http.Client) ServerOption {
 	return func(s *Server) error {
@@ -88,19 +80,20 @@ func WithLogger(logger *slog.Logger) ServerOption {
 
 // Server represents an MCP server that processes JSON-RPC requests
 type Server struct {
-	doc        libopenapi.Document
-	model      *v3.Document
-	baseURL    string
-	client     *http.Client
-	info       ServerInfo
-	authHeader string
-	logger     *slog.Logger
+	doc     libopenapi.Document
+	model   *v3.Document
+	baseURL string
+	client  *http.Client
+	info    ServerInfo
+	logger  *slog.Logger
 }
 
 // NewServer creates a new MCP server instance
 func NewServer(opts ...ServerOption) (*Server, error) {
 	s := &Server{
-		client: http.DefaultClient,
+		client: &http.Client{
+			Transport: http.DefaultTransport,
+		},
 	}
 
 	// Apply options
@@ -440,9 +433,6 @@ func (s *Server) handleToolsCall(request *ToolCallRequest) (*ToolCallResponse, e
 
 	if reqBody != nil {
 		req.Header.Set("Content-Type", "application/json")
-	}
-	if s.authHeader != "" {
-		req.Header.Set("Authorization", s.authHeader)
 	}
 
 	// Send request

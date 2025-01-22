@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/loopwork-ai/emcee/internal"
 	"github.com/loopwork-ai/emcee/mcp"
 )
 
@@ -73,13 +74,19 @@ The spec-path-or-url argument can be:
 					return retryablehttp.DefaultBackoff(min, max, attemptNum, resp)
 				}
 			}
+
+			// Set default headers if auth is provided
+			if auth != "" {
+				retryClient.HTTPClient.Transport = &internal.HeaderTransport{
+					Base: retryClient.HTTPClient.Transport,
+					Headers: http.Header{
+						"Authorization": []string{auth},
+					},
+				}
+			}
+
 			client := retryClient.StandardClient()
 			opts = append(opts, mcp.WithClient(client))
-
-			// Set Authentication header if provided
-			if auth != "" {
-				opts = append(opts, mcp.WithAuth(auth))
-			}
 
 			// Read OpenAPI specification data
 			var rpcInput io.Reader = os.Stdin

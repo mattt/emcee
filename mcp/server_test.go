@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/loopwork-ai/emcee/internal"
 	"github.com/loopwork-ai/emcee/jsonrpc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -211,6 +212,12 @@ func setupTestServer(t *testing.T) (*Server, *httptest.Server) {
 		}
 	}))
 
+	client := ts.Client()
+	client.Transport = &internal.HeaderTransport{
+		Base:    client.Transport,
+		Headers: http.Header{"Authorization": []string{"Bearer test-token"}},
+	}
+
 	// Create a server instance with the test server URL and spec
 	server, err := NewServer(
 		WithClient(ts.Client()),
@@ -354,15 +361,7 @@ func TestHandleToolsCall(t *testing.T) {
 	defer ts.Close()
 
 	// Test with auth header
-	serverWithAuth, tsWithAuth := setupTestServer(t)
-	serverWithAuth, err := NewServer(
-		WithClient(tsWithAuth.Client()),
-		WithServerInfo("Test API", "1.0.0"),
-		WithSpecData(newTestSpec(tsWithAuth.URL)),
-		WithAuth("Bearer test-token"),
-	)
-	require.NoError(t, err)
-	defer tsWithAuth.Close()
+	serverWithAuth, _ := setupTestServer(t)
 
 	// Create a small test image
 	imgData := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A} // PNG header
