@@ -77,6 +77,44 @@ func newTestSpec(serverURL string) []byte {
 					},
 				},
 			},
+			"/pets/{petId}": map[string]interface{}{
+				"get": map[string]interface{}{
+					"operationId": "getPet",
+					"summary":     "Get a specific pet",
+					"description": "Returns a specific pet by ID",
+					"parameters": []map[string]interface{}{
+						{
+							"name":        "petId",
+							"in":          "path",
+							"required":    true,
+							"description": "The ID of the pet to retrieve",
+							"schema": map[string]interface{}{
+								"type": "string",
+							},
+						},
+					},
+					"responses": map[string]interface{}{
+						"200": map[string]interface{}{
+							"description": "A pet",
+							"content": map[string]interface{}{
+								"application/json": map[string]interface{}{
+									"schema": map[string]interface{}{
+										"type": "object",
+										"properties": map[string]interface{}{
+											"id": map[string]interface{}{
+												"type": "integer",
+											},
+											"name": map[string]interface{}{
+												"type": "string",
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 	}
 
@@ -147,6 +185,13 @@ func setupTestServer(t *testing.T) (*Server, *httptest.Server) {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
+		case "/pets/special%20pet":
+			w.Header().Set("Content-Type", "application/json")
+			pet := map[string]interface{}{
+				"id":   1,
+				"name": "Special Pet",
+			}
+			json.NewEncoder(w).Encode(pet)
 		default:
 			http.NotFound(w, r)
 		}
@@ -253,10 +298,10 @@ func TestHandleToolsList(t *testing.T) {
 	err = json.Unmarshal(resultBytes, &toolsResp)
 	require.NoError(t, err)
 
-	assert.Len(t, toolsResp.Tools, 3) // GET and POST /pets, plus GET /pets/image
+	assert.Len(t, toolsResp.Tools, 4) // GET and POST /pets, plus GET /pets/image
 
 	// Verify GET operation
-	var getOp, postOp, imageOp Tool
+	var getOp, postOp, imageOp, getPetOp Tool
 	for _, tool := range toolsResp.Tools {
 		switch tool.Name {
 		case "listPets":
@@ -265,6 +310,8 @@ func TestHandleToolsList(t *testing.T) {
 			postOp = tool
 		case "getPetImage":
 			imageOp = tool
+		case "getPet":
+			getPetOp = tool
 		}
 	}
 
@@ -281,6 +328,11 @@ func TestHandleToolsList(t *testing.T) {
 	assert.Equal(t, "getPetImage", imageOp.Name)
 	assert.Equal(t, "Returns a pet's image in PNG format", imageOp.Description)
 	assert.Empty(t, imageOp.InputSchema.Properties) // No input parameters needed
+
+	// Verify GET /pets/special pet operation
+	assert.Equal(t, "getPet", getPetOp.Name)
+	assert.Equal(t, "Returns a specific pet by ID", getPetOp.Description)
+	assert.Contains(t, getPetOp.InputSchema.Properties, "petId")
 }
 
 func TestHandleToolsCall(t *testing.T) {
@@ -418,6 +470,38 @@ func TestHandleToolsCall(t *testing.T) {
 				assert.Equal(t, 4, response.ID.Value())
 				assert.Equal(t, jsonrpc.ErrMethodNotFound, response.Error.Code)
 				assert.Equal(t, "Method not found", response.Error.Message)
+			},
+		},
+		{
+			name:    "GET request with URL escaped parameters",
+			request: jsonrpc.NewRequest("tools/call", json.RawMessage(`{"name": "getPet", "arguments": {"petId": "special pet"}}`), 5),
+			validate: func(t *testing.T, response jsonrpc.Response) {
+				assert.Equal(t, "2.0", response.Version)
+				assert.Equal(t, 5, response.ID.Value())
+				assert.Nil(t, response.Error)
+
+				var result ToolCallResponse
+				resultBytes, err := json.Marshal(response.Result)
+				require.NoError(t, err)
+				err = json.Unmarshal(resultBytes, &result)
+				require.NoError(t, err)
+
+				assert.Len(t, result.Content, 1)
+				assert.False(t, result.IsError)
+
+				content := result.Content[0]
+				assert.Equal(t, "text", content.Type)
+
+				var textContent Content
+				contentBytes, err := json.Marshal(content)
+				assert.NoError(t, err)
+				err = json.Unmarshal(contentBytes, &textContent)
+				assert.NoError(t, err)
+
+				var pet map[string]interface{}
+				err = json.Unmarshal([]byte(textContent.Text), &pet)
+				assert.NoError(t, err)
+				assert.Equal(t, "Special Pet", pet["name"])
 			},
 		},
 	}

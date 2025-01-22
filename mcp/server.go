@@ -348,7 +348,8 @@ func (s *Server) handleToolsCall(request *ToolCallRequest) (*ToolCallResponse, e
 			if value, ok := request.Arguments[param.Name]; ok {
 				switch param.In {
 				case "path":
-					u.Path = strings.ReplaceAll(u.Path, "{"+param.Name+"}", fmt.Sprint(value))
+					// Use url.PathEscape to properly escape path parameters according to RFC 3986
+					u.Path = strings.ReplaceAll(u.Path, "{"+param.Name+"}", url.PathEscape(fmt.Sprint(value)))
 				case "query":
 					queryParams.Set(param.Name, fmt.Sprint(value))
 				case "header":
