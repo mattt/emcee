@@ -21,8 +21,8 @@ import (
 
 var rootCmd = &cobra.Command{
 	Use:   "emcee [spec-path-or-url]",
-	Short: "An MCP server for a given OpenAPI specification",
-	Long: `emcee is a CLI tool that provides an MCP stdio transport for a given OpenAPI specification.
+	Short: "Creates an MCP server for an OpenAPI specification",
+	Long: `emcee is a CLI tool that provides an Model Context Protocol (MCP) stdio transport for a given OpenAPI specification.
 It takes an OpenAPI specification path or URL as input and processes JSON-RPC requests
 from stdin, making corresponding API calls and returning JSON-RPC responses to stdout.
 
@@ -32,11 +32,14 @@ The spec-path-or-url argument can be:
 - "-" to read from stdin`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Set up context and signal handling
 		ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 		defer cancel()
 
+		// Set up error group
 		g, ctx := errgroup.WithContext(ctx)
 
+		// Set up logger
 		logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 			Level: slog.LevelDebug,
 		}))
@@ -47,15 +50,19 @@ The spec-path-or-url argument can be:
 		g.Go(func() error {
 			var opts []mcp.ServerOption
 
+			// Set server info
+			opts = append(opts, mcp.WithServerInfo(cmd.Name(), version))
+
+			// Set logger
 			opts = append(opts, mcp.WithLogger(logger))
 
+			// Configure HTTP client
 			retryClient := retryablehttp.NewClient()
 			retryClient.RetryMax = retries
 			retryClient.RetryWaitMin = 1 * time.Second
 			retryClient.RetryWaitMax = 30 * time.Second
 			retryClient.HTTPClient.Timeout = timeout
 			retryClient.Logger = logger
-
 			if rps > 0 {
 				retryClient.Backoff = func(min, max time.Duration, attemptNum int, resp *http.Response) time.Duration {
 					// Ensure we wait at least 1/rps between requests
@@ -66,19 +73,24 @@ The spec-path-or-url argument can be:
 					return retryablehttp.DefaultBackoff(min, max, attemptNum, resp)
 				}
 			}
-
 			client := retryClient.StandardClient()
 			opts = append(opts, mcp.WithClient(client))
 
+			// Set Authentication header if provided
+			if auth != "" {
+				opts = append(opts, mcp.WithAuth(auth))
+			}
+
+			// Read OpenAPI specification data
+			var rpcInput io.Reader = os.Stdin
 			var specData []byte
 			var err error
-			var rpcInput io.Reader = os.Stdin
 
 			if args[0] == "-" {
 				logger.Info("reading spec from stdin")
 
-				// When reading spec from stdin, we need to use /dev/tty for RPC input
-				// because stdin isn't a TTY when reading from a pipe
+				// When reading the OpenAPI spec from stdin, we need to read RPC input from /dev/tty
+				// since stdin is being used for the spec data and isn't available for interactive I/O
 				tty, err := os.Open("/dev/tty")
 				if err != nil {
 					return fmt.Errorf("error opening /dev/tty: %w", err)
@@ -94,6 +106,7 @@ The spec-path-or-url argument can be:
 			} else if strings.HasPrefix(args[0], "http://") || strings.HasPrefix(args[0], "https://") {
 				logger.Info("reading spec from URL", "url", args[0])
 
+				// Create HTTP request
 				req, err := http.NewRequest(http.MethodGet, args[0], nil)
 				if err != nil {
 					return fmt.Errorf("error creating request: %w", err)
@@ -104,6 +117,7 @@ The spec-path-or-url argument can be:
 					req.Header.Set("Authorization", auth)
 				}
 
+				// Make HTTP request
 				resp, err := client.Do(req)
 				if err != nil {
 					return fmt.Errorf("error downloading spec: %w", err)
@@ -113,6 +127,7 @@ The spec-path-or-url argument can be:
 				}
 				defer resp.Body.Close()
 
+				// Read spec from response body
 				specData, err = io.ReadAll(resp.Body)
 				if err != nil {
 					return fmt.Errorf("error reading spec from %s: %w", args[0], err)
@@ -142,28 +157,23 @@ The spec-path-or-url argument can be:
 					return fmt.Errorf("spec file too large (max 100MB): %s", cleanPath)
 				}
 
+				// Read spec from file
 				specData, err = os.ReadFile(cleanPath)
 				if err != nil {
 					return fmt.Errorf("error reading spec file %s: %w", cleanPath, err)
 				}
 			}
 
-			if len(specData) == 0 {
-				return fmt.Errorf("no OpenAPI spec data provided")
-			}
+			// Set spec data
 			opts = append(opts, mcp.WithSpecData(specData))
 
-			if auth != "" {
-				opts = append(opts, mcp.WithAuth(auth))
-			}
-
-			opts = append(opts, mcp.WithLogger(logger))
-
+			// Create server
 			server, err := mcp.NewServer(opts...)
 			if err != nil {
 				return fmt.Errorf("error creating server: %w", err)
 			}
 
+			// Create and run transport
 			transport := mcp.NewStdioTransport(rpcInput, os.Stdout, os.Stderr)
 			return transport.Run(ctx, server.Handle)
 		})

@@ -51,6 +51,10 @@ func WithServerInfo(name, version string) ServerOption {
 // WithSpecData sets the OpenAPI spec from a byte slice
 func WithSpecData(data []byte) ServerOption {
 	return func(s *Server) error {
+		if len(data) == 0 {
+			return fmt.Errorf("no OpenAPI spec data provided")
+		}
+
 		doc, err := libopenapi.NewDocument(data)
 		if err != nil {
 			return fmt.Errorf("error parsing OpenAPI spec: %v", err)
