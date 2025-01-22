@@ -127,11 +127,7 @@ func (s *Server) HandleRequest(request jsonrpc.Request) jsonrpc.Response {
 	if s.logger != nil {
 		reqJSON, _ := json.MarshalIndent(request, "", "  ")
 		s.logger.Info("incoming request",
-			"request", string(reqJSON))
-	}
-
-	if s.logger != nil && request.Method != "" {
-		s.logger.Info("processing request",
+			"request", string(reqJSON),
 			"method", request.Method)
 	}
 
@@ -147,8 +143,7 @@ func (s *Server) HandleRequest(request jsonrpc.Request) jsonrpc.Response {
 		response = handleMethod(request, s.handlePing)
 	default:
 		if s.logger != nil {
-			s.logger.Warn("unknown method requested",
-				"method", request.Method)
+			s.logger.Warn("unknown method requested", "method", request.Method)
 		}
 		response = jsonrpc.NewResponse(request.ID, nil, jsonrpc.NewError(jsonrpc.ErrMethodNotFound, nil))
 	}
@@ -206,10 +201,6 @@ func (s *Server) handleInitialize(request *InitializeRequest) (*InitializeRespon
 }
 
 func (s *Server) handleToolsList(request *ToolsListRequest) (*ToolsListResponse, error) {
-	if s.logger != nil {
-		s.logger.Info("building tools list from OpenAPI spec")
-	}
-
 	tools := []Tool{}
 	if s.model.Paths == nil || s.model.Paths.PathItems == nil {
 		return &ToolsListResponse{Tools: tools}, nil
@@ -302,28 +293,18 @@ func (s *Server) handleToolsList(request *ToolsListRequest) (*ToolsListResponse,
 		}
 	}
 
-	if s.logger != nil {
-		s.logger.Info("tools list built", "count", len(tools))
-	}
-
 	return &ToolsListResponse{Tools: tools}, nil
 }
 
 func (s *Server) handleToolsCall(request *ToolCallRequest) (*ToolCallResponse, error) {
 	method, path, operation, found := s.findOperation(s.model, request.Name)
 	if !found {
-		if s.logger != nil {
-			s.logger.Warn("operation not found", "operation", request.Name)
-		}
 		return nil, jsonrpc.NewError(jsonrpc.ErrMethodNotFound, nil)
 	}
 
 	// Build URL from base URL and path
 	baseURL, err := url.Parse(s.baseURL)
 	if err != nil {
-		if s.logger != nil {
-			s.logger.Error("failed to parse base URL", "error", err)
-		}
 		return nil, jsonrpc.NewError(jsonrpc.ErrInternal, err)
 	}
 
@@ -378,9 +359,6 @@ func (s *Server) handleToolsCall(request *ToolCallRequest) (*ToolCallResponse, e
 			if len(bodyParams) > 0 {
 				jsonBody, err := json.Marshal(bodyParams)
 				if err != nil {
-					if s.logger != nil {
-						s.logger.Error("failed to marshal request body", "error", err)
-					}
 					return nil, jsonrpc.NewError(jsonrpc.ErrInvalidParams, err)
 				}
 				reqBody = bytes.NewReader(jsonBody)
@@ -396,9 +374,6 @@ func (s *Server) handleToolsCall(request *ToolCallRequest) (*ToolCallResponse, e
 	// Create and send request
 	req, err := http.NewRequest(method, u.String(), reqBody)
 	if err != nil {
-		if s.logger != nil {
-			s.logger.Error("failed to create request", "error", err)
-		}
 		return nil, jsonrpc.NewError(jsonrpc.ErrInternal, err)
 	}
 
@@ -419,9 +394,6 @@ func (s *Server) handleToolsCall(request *ToolCallRequest) (*ToolCallResponse, e
 	// Send request
 	resp, err := s.client.Do(req)
 	if err != nil {
-		if s.logger != nil {
-			s.logger.Error("failed to send request", "error", err)
-		}
 		return nil, jsonrpc.NewError(jsonrpc.ErrInternal, err)
 	}
 	defer resp.Body.Close()
@@ -429,19 +401,11 @@ func (s *Server) handleToolsCall(request *ToolCallRequest) (*ToolCallResponse, e
 	// Read response
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		if s.logger != nil {
-			s.logger.Error("failed to read response body", "error", err)
-		}
 		return nil, jsonrpc.NewError(jsonrpc.ErrInternal, err)
 	}
 
 	// Handle error responses
 	if resp.StatusCode >= 400 {
-		if s.logger != nil {
-			s.logger.Error("request failed",
-				"status", resp.StatusCode,
-				"body", string(body))
-		}
 		textContent := NewTextContent(fmt.Sprintf("Request failed with status %d: %s", resp.StatusCode, string(body)), []Role{RoleAssistant}, nil)
 		return nil, jsonrpc.NewError(jsonrpc.ErrInternal, textContent)
 	}
