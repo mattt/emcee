@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/loopwork-ai/emcee/internal"
 	"github.com/loopwork-ai/emcee/jsonrpc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -131,8 +132,17 @@ func setupTestServer(t *testing.T) (*Server, *httptest.Server) {
 	// Create a small test image
 	imgData := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A} // PNG header
 
+	// Track if auth header was checked
+	authHeaderChecked := false
+
 	var ts *httptest.Server
 	ts = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify auth header if present
+		if authHeader := r.Header.Get("Authorization"); authHeader != "" {
+			assert.Equal(t, "Bearer test-token", authHeader, "Authorization header should match")
+			authHeaderChecked = true
+		}
+
 		switch r.URL.Path {
 		case "/openapi.json":
 			w.Header().Set("Content-Type", "application/json")
@@ -146,6 +156,11 @@ func setupTestServer(t *testing.T) (*Server, *httptest.Server) {
 				petType := r.URL.Query().Get("type")
 				assert.Equal(t, "5", limit)
 				assert.Equal(t, "dog", petType)
+
+				// For auth test case, verify the auth header was checked
+				if r.Header.Get("Authorization") != "" {
+					assert.True(t, authHeaderChecked, "Auth header should have been checked")
+				}
 
 				pets := []map[string]interface{}{
 					{"id": 1, "name": "Fluffy", "type": "dog"},
@@ -196,6 +211,12 @@ func setupTestServer(t *testing.T) (*Server, *httptest.Server) {
 			http.NotFound(w, r)
 		}
 	}))
+
+	client := ts.Client()
+	client.Transport = &internal.HeaderTransport{
+		Base:    client.Transport,
+		Headers: http.Header{"Authorization": []string{"Bearer test-token"}},
+	}
 
 	// Create a server instance with the test server URL and spec
 	server, err := NewServer(
@@ -339,16 +360,21 @@ func TestHandleToolsCall(t *testing.T) {
 	server, ts := setupTestServer(t)
 	defer ts.Close()
 
+	// Test with auth header
+	serverWithAuth, _ := setupTestServer(t)
+
 	// Create a small test image
 	imgData := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A} // PNG header
 
 	tests := []struct {
 		name     string
+		server   *Server
 		request  jsonrpc.Request
 		validate func(*testing.T, jsonrpc.Response)
 	}{
 		{
 			name:    "GET request with query parameters",
+			server:  server,
 			request: jsonrpc.NewRequest("tools/call", json.RawMessage(`{"name": "listPets", "arguments": {"limit": 5, "type": "dog"}}`), 1),
 			validate: func(t *testing.T, response jsonrpc.Response) {
 				assert.Equal(t, "2.0", response.Version)
@@ -391,6 +417,7 @@ func TestHandleToolsCall(t *testing.T) {
 		},
 		{
 			name:    "POST request with body parameters",
+			server:  server,
 			request: jsonrpc.NewRequest("tools/call", json.RawMessage(`{"name": "createPet", "arguments": {"name": "Whiskers", "age": 5}}`), 2),
 			validate: func(t *testing.T, response jsonrpc.Response) {
 				assert.Equal(t, "2.0", response.Version)
@@ -428,6 +455,7 @@ func TestHandleToolsCall(t *testing.T) {
 		},
 		{
 			name:    "GET image request",
+			server:  server,
 			request: jsonrpc.NewRequest("tools/call", json.RawMessage(`{"name": "getPetImage"}`), 3),
 			validate: func(t *testing.T, response jsonrpc.Response) {
 				assert.Equal(t, "2.0", response.Version)
@@ -464,6 +492,7 @@ func TestHandleToolsCall(t *testing.T) {
 		},
 		{
 			name:    "Request with invalid operationId",
+			server:  server,
 			request: jsonrpc.NewRequest("tools/call", json.RawMessage(`{"name": "nonexistentOperation"}`), 4),
 			validate: func(t *testing.T, response jsonrpc.Response) {
 				assert.Equal(t, "2.0", response.Version)
@@ -474,6 +503,7 @@ func TestHandleToolsCall(t *testing.T) {
 		},
 		{
 			name:    "GET request with URL escaped parameters",
+			server:  server,
 			request: jsonrpc.NewRequest("tools/call", json.RawMessage(`{"name": "getPet", "arguments": {"petId": "special pet"}}`), 5),
 			validate: func(t *testing.T, response jsonrpc.Response) {
 				assert.Equal(t, "2.0", response.Version)
@@ -504,11 +534,58 @@ func TestHandleToolsCall(t *testing.T) {
 				assert.Equal(t, "Special Pet", pet["name"])
 			},
 		},
+		{
+			name:    "Request with auth header",
+			server:  serverWithAuth,
+			request: jsonrpc.NewRequest("tools/call", json.RawMessage(`{"name": "listPets", "arguments": {"limit": 5, "type": "dog"}}`), 6),
+			validate: func(t *testing.T, response jsonrpc.Response) {
+				assert.Equal(t, "2.0", response.Version)
+				assert.Equal(t, 6, response.ID.Value())
+				assert.Nil(t, response.Error)
+
+				var result ToolCallResponse
+				resultBytes, err := json.Marshal(response.Result)
+				require.NoError(t, err)
+				err = json.Unmarshal(resultBytes, &result)
+				require.NoError(t, err)
+
+				assert.Len(t, result.Content, 1)
+				assert.False(t, result.IsError)
+
+				// Verify the response content
+				content := result.Content[0]
+				assert.Equal(t, "text", content.Type)
+				assert.NotNil(t, content.Annotations)
+				assert.Contains(t, content.Annotations.Audience, RoleAssistant)
+
+				var textContent Content
+				contentBytes, err := json.Marshal(content)
+				assert.NoError(t, err)
+				err = json.Unmarshal(contentBytes, &textContent)
+				assert.NoError(t, err)
+
+				var pets []interface{}
+				err = json.Unmarshal([]byte(textContent.Text), &pets)
+				assert.NoError(t, err)
+				assert.Len(t, pets, 2)
+
+				// Verify the returned pets
+				for _, pet := range pets {
+					petMap := pet.(map[string]interface{})
+					assert.Equal(t, "dog", petMap["type"])
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			response := server.HandleRequest(tt.request)
+			var response jsonrpc.Response
+			if tt.server != nil {
+				response = tt.server.HandleRequest(tt.request)
+			} else {
+				response = server.HandleRequest(tt.request)
+			}
 			tt.validate(t, response)
 		})
 	}
