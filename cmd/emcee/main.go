@@ -175,7 +175,7 @@ The spec-path-or-url argument can be:
 
 			// Create and run transport
 			transport := mcp.NewStdioTransport(rpcInput, os.Stdout, os.Stderr)
-			return transport.Run(ctx, server.Handle)
+			return transport.Run(ctx, server.HandleRequest)
 		})
 
 		return g.Wait()

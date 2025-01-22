@@ -208,7 +208,7 @@ func TestServer_HandleInitialize(t *testing.T) {
 	request := jsonrpc.NewRequest("initialize", json.RawMessage(`{}`), 1)
 
 	// Get the response
-	response := server.Handle(request)
+	response := server.HandleRequest(request)
 
 	// Assert no error
 	assert.Equal(t, "2.0", response.Version)
@@ -251,7 +251,7 @@ func TestServer_HandleInitialize(t *testing.T) {
 	require.NoError(t, err)
 
 	// Get response from empty spec server
-	responseEmpty := serverEmpty.Handle(request)
+	responseEmpty := serverEmpty.HandleRequest(request)
 	var resultEmpty InitializeResponse
 	resultBytes, err = json.Marshal(responseEmpty.Result)
 	require.NoError(t, err)
@@ -265,7 +265,7 @@ func TestHandleToolsList(t *testing.T) {
 
 	request := jsonrpc.NewRequest("tools/list", nil, 1)
 
-	response := server.Handle(request)
+	response := server.HandleRequest(request)
 
 	// Verify response structure
 	assert.Equal(t, "2.0", response.Version)
@@ -409,7 +409,7 @@ func TestHandleToolsCall(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			response := server.Handle(tt.request)
+			response := server.HandleRequest(tt.request)
 			tt.validate(t, response)
 		})
 	}
@@ -421,7 +421,7 @@ func TestHandleInvalidMethod(t *testing.T) {
 
 	request := jsonrpc.NewRequest("invalid/method", nil, 1)
 
-	response := server.Handle(request)
+	response := server.HandleRequest(request)
 
 	assert.Equal(t, "2.0", response.Version)
 	assert.Equal(t, 1, response.ID.Value())

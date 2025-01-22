@@ -142,7 +142,7 @@ func TestTransport_Integration(t *testing.T) {
 	errOut := &bytes.Buffer{}
 
 	transport := NewStdioTransport(in, out, errOut)
-	err = transport.Run(context.Background(), server.Handle)
+	err = transport.Run(context.Background(), server.HandleRequest)
 	require.NoError(t, err)
 
 	// Verify the response
@@ -168,7 +168,7 @@ func TestTransport_Integration(t *testing.T) {
 	errOut = &bytes.Buffer{}
 
 	transport = NewStdioTransport(in, out, errOut)
-	err = transport.Run(context.Background(), server.Handle)
+	err = transport.Run(context.Background(), server.HandleRequest)
 	require.NoError(t, err)
 
 	// Verify the response
@@ -187,7 +187,7 @@ func TestTransport_Integration(t *testing.T) {
 	errOut = &bytes.Buffer{}
 
 	transport = NewStdioTransport(in, out, errOut)
-	err = transport.Run(context.Background(), server.Handle)
+	err = transport.Run(context.Background(), server.HandleRequest)
 	require.NoError(t, err)
 
 	// Verify the response
@@ -207,7 +207,7 @@ func TestTransport_Integration(t *testing.T) {
 	errOut = &bytes.Buffer{}
 
 	transport = NewStdioTransport(in, out, errOut)
-	err = transport.Run(context.Background(), server.Handle)
+	err = transport.Run(context.Background(), server.HandleRequest)
 	require.NoError(t, err)
 
 	// Verify the response
@@ -225,7 +225,7 @@ func TestTransport_Integration(t *testing.T) {
 	errOut = &bytes.Buffer{}
 
 	transport = NewStdioTransport(in, out, errOut)
-	err = transport.Run(context.Background(), server.Handle)
+	err = transport.Run(context.Background(), server.HandleRequest)
 	require.NoError(t, err)
 
 	// Verify the response

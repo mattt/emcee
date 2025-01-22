@@ -122,8 +122,8 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	return s, nil
 }
 
-// Handle processes a single JSON-RPC request and returns a response
-func (s *Server) Handle(request jsonrpc.Request) jsonrpc.Response {
+// HandleRequest processes a single JSON-RPC request and returns a response
+func (s *Server) HandleRequest(request jsonrpc.Request) jsonrpc.Response {
 	if s.logger != nil {
 		reqJSON, _ := json.MarshalIndent(request, "", "  ")
 		s.logger.Info("incoming request",
