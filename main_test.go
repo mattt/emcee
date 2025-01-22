@@ -78,4 +78,40 @@ func TestIntegration(t *testing.T) {
 	assert.Equal(t, "2.0", response.JSONRPC)
 	assert.Equal(t, 1, response.ID)
 	assert.NotEmpty(t, response.Result.Tools, "Expected at least one tool in response")
+
+	// Find and verify the point tool
+	var pointTool struct {
+		Name        string
+		Description string
+		InputSchema struct {
+			Type       string                 `json:"type"`
+			Properties map[string]interface{} `json:"properties"`
+			Required   []string               `json:"required"`
+		}
+	}
+
+	foundPointTool := false
+	for _, tool := range response.Result.Tools {
+		if tool.Name == "point" {
+			foundPointTool = true
+			err := json.Unmarshal(tool.InputSchema, &pointTool.InputSchema)
+			require.NoError(t, err)
+			pointTool.Name = tool.Name
+			pointTool.Description = tool.Description
+			break
+		}
+	}
+
+	require.True(t, foundPointTool, "Expected to find point tool")
+	assert.Equal(t, "point", pointTool.Name)
+	assert.Contains(t, pointTool.Description, "Returns metadata about a given latitude/longitude point")
+
+	// Verify point tool has proper parameter schema
+	assert.Equal(t, "object", pointTool.InputSchema.Type)
+	assert.Contains(t, pointTool.InputSchema.Properties, "point", "Point tool should have 'point' parameter")
+
+	pointParam := pointTool.InputSchema.Properties["point"].(map[string]interface{})
+	assert.Equal(t, "string", pointParam["type"])
+	assert.Contains(t, pointParam["description"].(string), "Point (latitude, longitude)")
+	assert.Contains(t, pointTool.InputSchema.Required, "point", "Point parameter should be required")
 }
