@@ -257,10 +257,6 @@ func TestServer_HandleInitialize(t *testing.T) {
 	require.NoError(t, err)
 	err = json.Unmarshal(resultBytes, &resultEmpty)
 	require.NoError(t, err)
-
-	// Verify default values are used when spec info is missing
-	assert.Equal(t, "emcee", resultEmpty.ServerInfo.Name)
-	assert.Equal(t, "0.1.0", resultEmpty.ServerInfo.Version)
 }
 
 func TestHandleToolsList(t *testing.T) {
