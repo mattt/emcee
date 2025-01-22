@@ -8,6 +8,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"reflect"
 	"strings"
 
 	"github.com/pb33f/libopenapi"
@@ -128,7 +130,28 @@ func (s *Server) HandleRequest(request jsonrpc.Request) jsonrpc.Response {
 			"request", string(reqJSON))
 	}
 
-	response := s.handleRequest(request)
+	if s.logger != nil && request.Method != "" {
+		s.logger.Info("processing request",
+			"method", request.Method)
+	}
+
+	var response jsonrpc.Response
+	switch request.Method {
+	case "initialize":
+		response = handleMethod(request, s.handleInitialize)
+	case "tools/list":
+		response = handleMethod(request, s.handleToolsList)
+	case "tools/call":
+		response = handleMethod(request, s.handleToolsCall)
+	case "ping/ping":
+		response = handleMethod(request, s.handlePing)
+	default:
+		if s.logger != nil {
+			s.logger.Warn("unknown method requested",
+				"method", request.Method)
+		}
+		response = jsonrpc.NewResponse(request.ID, nil, jsonrpc.NewError(jsonrpc.ErrMethodNotFound, nil))
+	}
 
 	if s.logger != nil {
 		respJSON, _ := json.MarshalIndent(response, "", "  ")
@@ -139,33 +162,39 @@ func (s *Server) HandleRequest(request jsonrpc.Request) jsonrpc.Response {
 	return response
 }
 
-func (s *Server) handleRequest(request jsonrpc.Request) jsonrpc.Response {
-	if s.logger != nil && request.Method != "" {
-		s.logger.Info("processing request",
-			"method", request.Method)
+// handleMethod is a helper to unmarshal params and call a handler with proper error handling
+func handleMethod[Req, Resp any](request jsonrpc.Request, handler func(*Req) (*Resp, error)) jsonrpc.Response {
+	var req Req
+	if request.Params != nil {
+		if err := json.Unmarshal(request.Params, &req); err != nil {
+			return jsonrpc.NewResponse(request.ID, nil, jsonrpc.NewError(jsonrpc.ErrInvalidParams, err))
+		}
+	}
+	resp, err := handler(&req)
+	if err != nil {
+		if rpcErr, ok := err.(*jsonrpc.Error); ok {
+			return jsonrpc.NewResponse(request.ID, nil, rpcErr)
+		}
+		return jsonrpc.NewResponse(request.ID, nil, jsonrpc.NewError(jsonrpc.ErrInternal, err))
 	}
 
-	switch request.Method {
-	case "initialize":
-		return s.handleInitialize(request)
-	case "tools/list":
-		return s.handleToolsList(request)
-	case "tools/call":
-		return s.handleToolsCall(request)
-	default:
-		if s.logger != nil {
-			s.logger.Warn("unknown method requested",
-				"method", request.Method)
+	// Convert response to interface{} to ensure proper JSON serialization
+	var result interface{} = resp
+	if resp != nil {
+		// If it's a pointer, get the underlying value
+		if rv := reflect.ValueOf(resp); rv.Kind() == reflect.Ptr && !rv.IsNil() {
+			result = rv.Elem().Interface()
 		}
-		return jsonrpc.NewResponse(request.ID, nil, jsonrpc.NewError(jsonrpc.ErrMethodNotFound, nil))
 	}
+
+	return jsonrpc.NewResponse(request.ID, result, nil)
 }
 
-func (s *Server) handleInitialize(request jsonrpc.Request) jsonrpc.Response {
-	response := InitializeResponse{
+func (s *Server) handleInitialize(request *InitializeRequest) (*InitializeResponse, error) {
+	response := &InitializeResponse{
 		ProtocolVersion: Version,
 		Capabilities: ServerCapabilities{
-			Tools: struct {
+			Tools: &struct {
 				ListChanged bool `json:"listChanged"`
 			}{
 				ListChanged: false,
@@ -173,260 +202,301 @@ func (s *Server) handleInitialize(request jsonrpc.Request) jsonrpc.Response {
 		},
 		ServerInfo: s.info,
 	}
-	return jsonrpc.NewResponse(request.ID, response, nil)
+	return response, nil
 }
 
-func (s *Server) handleToolsList(request jsonrpc.Request) jsonrpc.Response {
+func (s *Server) handleToolsList(request *ToolsListRequest) (*ToolsListResponse, error) {
 	if s.logger != nil {
 		s.logger.Info("building tools list from OpenAPI spec")
 	}
 
-	model, err := s.doc.BuildV3Model()
-	if err != nil {
-		if s.logger != nil {
-			s.logger.Error("failed to build OpenAPI model",
-				"error", err)
-		}
-		return jsonrpc.NewResponse(request.ID, nil, jsonrpc.NewError(jsonrpc.ErrInternal, err))
-	}
-
 	tools := []Tool{}
-	for pair := model.Model.Paths.PathItems.First(); pair != nil; pair = pair.Next() {
-		path := pair.Key()
+	if s.model.Paths == nil || s.model.Paths.PathItems == nil {
+		return &ToolsListResponse{Tools: tools}, nil
+	}
+
+	// Iterate through paths and operations
+	for pair := s.model.Paths.PathItems.First(); pair != nil; pair = pair.Next() {
 		pathItem := pair.Value()
-		if pathItem.Get != nil {
-			tools = append(tools, createTool("GET", path, pathItem.Get))
-		}
-		if pathItem.Post != nil {
-			tools = append(tools, createTool("POST", path, pathItem.Post))
-		}
-		if pathItem.Put != nil {
-			tools = append(tools, createTool("PUT", path, pathItem.Put))
-		}
-		if pathItem.Delete != nil {
-			tools = append(tools, createTool("DELETE", path, pathItem.Delete))
-		}
-		if pathItem.Patch != nil {
-			tools = append(tools, createTool("PATCH", path, pathItem.Patch))
-		}
-	}
 
-	if s.logger != nil {
-		s.logger.Info("tools list built",
-			"count", len(tools))
-	}
-
-	return jsonrpc.NewResponse(request.ID, ToolsListResponse{Tools: tools}, nil)
-}
-
-func (s *Server) handleToolsCall(request jsonrpc.Request) jsonrpc.Response {
-	var params ToolCallParams
-	if err := json.Unmarshal(request.Params, &params); err != nil {
-		if s.logger != nil {
-			s.logger.Error("failed to unmarshal tool call params",
-				"error", err)
+		// Process each operation type
+		operations := []struct {
+			method string
+			op     *v3.Operation
+		}{
+			{"GET", pathItem.Get},
+			{"POST", pathItem.Post},
+			{"PUT", pathItem.Put},
+			{"DELETE", pathItem.Delete},
+			{"PATCH", pathItem.Patch},
 		}
-		return jsonrpc.NewResponse(request.ID, nil, jsonrpc.NewError(jsonrpc.ErrInvalidParams, err))
-	}
 
-	model, errs := s.doc.BuildV3Model()
-	if errs != nil {
-		if s.logger != nil {
-			s.logger.Error("failed to build OpenAPI model",
-				"error", errs)
-		}
-		return jsonrpc.NewResponse(request.ID, nil, jsonrpc.NewError(jsonrpc.ErrInternal, errs))
-	}
-
-	method, path, found := s.findOperation(&model.Model, params.Name)
-	if !found {
-		if s.logger != nil {
-			s.logger.Warn("operation not found",
-				"operation", params.Name)
-		}
-		return jsonrpc.NewResponse(request.ID, nil, jsonrpc.NewError(jsonrpc.ErrMethodNotFound, nil))
-	}
-
-	url := s.baseURL + path
-
-	var body io.Reader
-	if len(params.Arguments) > 0 && (method == "POST" || method == "PUT" || method == "PATCH") {
-		jsonBody, err := json.Marshal(params.Arguments)
-		if err != nil {
-			if s.logger != nil {
-				s.logger.Error("failed to marshal request body",
-					"error", err)
+		for _, op := range operations {
+			if op.op == nil || op.op.OperationId == "" {
+				continue
 			}
-			return jsonrpc.NewResponse(request.ID, nil, jsonrpc.NewError(jsonrpc.ErrInternal, err))
-		}
-		body = bytes.NewReader(jsonBody)
-	}
 
-	req, err := http.NewRequest(method, url, body)
-	if err != nil {
-		if s.logger != nil {
-			s.logger.Error("failed to create HTTP request",
-				"error", err)
-		}
-		return toolError(request.ID, fmt.Sprintf("Error making request: %v", err))
-	}
+			// Create input schema
+			inputSchema := InputSchema{
+				Type:       "object",
+				Properties: make(map[string]interface{}),
+			}
 
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
+			// Add parameters to schema
+			if op.op.Parameters != nil {
+				for _, param := range op.op.Parameters {
+					if param.Schema != nil && param.Schema.Schema() != nil {
+						schema := param.Schema.Schema()
+						schemaType := "string"
+						if len(schema.Type) > 0 {
+							schemaType = schema.Type[0]
+						}
+						inputSchema.Properties[param.Name] = map[string]interface{}{
+							"type":        schemaType,
+							"description": param.Description,
+							"in":          param.In,
+						}
+					}
+				}
+			}
 
-	if s.authHeader != "" {
-		req.Header.Set("Authorization", s.authHeader)
-	}
-
-	if s.logger != nil {
-		s.logger.Info("making HTTP request",
-			"method", method,
-			"url", url,
-			"has_body", body != nil)
-		if body != nil {
-			s.logger.Debug("request body",
-				"body", params.Arguments)
-		}
-	}
-
-	resp, err := s.client.Do(req)
-	if err != nil {
-		if s.logger != nil {
-			s.logger.Error("HTTP request error",
-				"error", err)
-		}
-		return toolError(request.ID, fmt.Sprintf("Error making request: %v", err))
-	}
-	defer resp.Body.Close()
-
-	if s.logger != nil {
-		s.logger.Info("HTTP response status",
-			"status", resp.Status)
-	}
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return toolError(request.ID, fmt.Sprintf("Error reading response: %v", err))
-	}
-
-	contentType := resp.Header.Get("Content-Type")
-	if strings.HasPrefix(contentType, "image/") {
-		// For image responses, base64 encode the data
-		if resp.StatusCode >= 400 {
-			return toolError(request.ID, fmt.Sprintf("Image request failed with status %d", resp.StatusCode))
-		}
-		return toolSuccess(request.ID, NewImageContent(base64.StdEncoding.EncodeToString(respBody), contentType, []Role{RoleAssistant}, nil))
-	}
-
-	// Try to parse as JSON first
-	var jsonResult interface{}
-	if err := json.Unmarshal(respBody, &jsonResult); err != nil {
-		// If not JSON, return as plain text
-		return toolSuccess(request.ID, NewTextContent(string(respBody), []Role{RoleAssistant}, nil))
-	}
-
-	// For JSON responses, convert to string for better readability
-	jsonStr, err := json.MarshalIndent(jsonResult, "", "  ")
-	if err != nil {
-		jsonStr = respBody
-	}
-
-	if resp.StatusCode >= 400 {
-		return toolError(request.ID, string(jsonStr))
-	}
-	return toolSuccess(request.ID, NewTextContent(string(jsonStr), []Role{RoleAssistant}, nil))
-}
-
-// toolSuccess creates a successful tool response with the given content
-func toolSuccess(id interface{}, content interface{}) jsonrpc.Response {
-	return jsonrpc.NewResponse(id, CallToolResult{
-		Content: []interface{}{content},
-		IsError: false,
-	}, nil)
-}
-
-// toolError creates an error tool response with the given message
-func toolError(id interface{}, message string) jsonrpc.Response {
-	return jsonrpc.NewResponse(id, CallToolResult{
-		Content: []interface{}{
-			NewTextContent(message, []Role{RoleAssistant}, nil),
-		},
-		IsError: true,
-	}, nil)
-}
-
-func (s *Server) findOperation(model *v3.Document, operationId string) (method, path string, found bool) {
-	for pair := model.Paths.PathItems.First(); pair != nil; pair = pair.Next() {
-		pathStr := pair.Key()
-		pathItem := pair.Value()
-
-		if pathItem.Get != nil && pathItem.Get.OperationId == operationId {
-			return "GET", pathStr, true
-		}
-		if pathItem.Post != nil && pathItem.Post.OperationId == operationId {
-			return "POST", pathStr, true
-		}
-		if pathItem.Put != nil && pathItem.Put.OperationId == operationId {
-			return "PUT", pathStr, true
-		}
-		if pathItem.Delete != nil && pathItem.Delete.OperationId == operationId {
-			return "DELETE", pathStr, true
-		}
-		if pathItem.Patch != nil && pathItem.Patch.OperationId == operationId {
-			return "PATCH", pathStr, true
-		}
-	}
-	return "", "", false
-}
-
-func createTool(method string, path string, operation *v3.Operation) Tool {
-	name := operation.OperationId
-	if name == "" {
-		name = fmt.Sprintf("%s %s", method, path)
-	}
-
-	description := operation.Description
-	if description == "" {
-		description = operation.Summary
-	}
-
-	inputSchema := InputSchema{
-		Type:       "object",
-		Properties: make(map[string]interface{}),
-	}
-
-	if operation.RequestBody != nil && operation.RequestBody.Content != nil {
-		if mediaType, ok := operation.RequestBody.Content.Get("application/json"); ok && mediaType != nil {
-			if mediaType.Schema != nil {
-				if schema := mediaType.Schema.Schema(); schema != nil {
-					// Extract properties from the schema
-					if schema.Properties != nil {
-						for pair := schema.Properties.First(); pair != nil; pair = pair.Next() {
-							propName := pair.Key()
-							propSchema := pair.Value()
-							if innerSchema := propSchema.Schema(); innerSchema != nil {
-								schemaType := "object"
-								if len(innerSchema.Type) > 0 {
-									schemaType = innerSchema.Type[0]
-								}
-								inputSchema.Properties[propName] = map[string]interface{}{
-									"type": schemaType,
+			// Add request body to schema if it exists
+			if op.op.RequestBody != nil && op.op.RequestBody.Content != nil {
+				if mediaType, ok := op.op.RequestBody.Content.Get("application/json"); ok && mediaType != nil {
+					if mediaType.Schema != nil && mediaType.Schema.Schema() != nil {
+						schema := mediaType.Schema.Schema()
+						if schema.Properties != nil {
+							for pair := schema.Properties.First(); pair != nil; pair = pair.Next() {
+								propName := pair.Key()
+								propSchema := pair.Value().Schema()
+								if propSchema != nil {
+									schemaType := "string"
+									if len(propSchema.Type) > 0 {
+										schemaType = propSchema.Type[0]
+									}
+									inputSchema.Properties[propName] = map[string]interface{}{
+										"type":        schemaType,
+										"description": propSchema.Description,
+										"in":          "body",
+									}
 								}
 							}
 						}
+						if schema.Required != nil {
+							inputSchema.Required = schema.Required
+						}
 					}
-					if schema.Required != nil {
-						inputSchema.Required = schema.Required
-					}
+				}
+			}
+
+			description := op.op.Description
+			if description == "" {
+				description = op.op.Summary
+			}
+
+			tools = append(tools, Tool{
+				Name:        op.op.OperationId,
+				Description: description,
+				InputSchema: inputSchema,
+			})
+		}
+	}
+
+	if s.logger != nil {
+		s.logger.Info("tools list built", "count", len(tools))
+	}
+
+	return &ToolsListResponse{Tools: tools}, nil
+}
+
+func (s *Server) handleToolsCall(request *ToolCallRequest) (*ToolCallResponse, error) {
+	method, path, operation, found := s.findOperation(s.model, request.Name)
+	if !found {
+		if s.logger != nil {
+			s.logger.Warn("operation not found", "operation", request.Name)
+		}
+		return nil, jsonrpc.NewError(jsonrpc.ErrMethodNotFound, nil)
+	}
+
+	// Build URL from base URL and path
+	baseURL, err := url.Parse(s.baseURL)
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Error("failed to parse base URL", "error", err)
+		}
+		return nil, jsonrpc.NewError(jsonrpc.ErrInternal, err)
+	}
+
+	u := url.URL{
+		Scheme: baseURL.Scheme,
+		Host:   baseURL.Host,
+		Path:   path,
+	}
+
+	if baseURL.Scheme == "" {
+		u.Scheme = "http"
+	}
+
+	// Process parameters based on their location (path, query, header)
+	queryParams := url.Values{}
+	headerParams := make(http.Header)
+	var bodyParams map[string]interface{}
+
+	// Handle parameters
+	if operation.Parameters != nil {
+		for _, param := range operation.Parameters {
+			if value, ok := request.Arguments[param.Name]; ok {
+				switch param.In {
+				case "path":
+					u.Path = strings.ReplaceAll(u.Path, "{"+param.Name+"}", fmt.Sprint(value))
+				case "query":
+					queryParams.Set(param.Name, fmt.Sprint(value))
+				case "header":
+					headerParams.Add(param.Name, fmt.Sprint(value))
 				}
 			}
 		}
 	}
 
-	return Tool{
-		Name:        name,
-		Description: description,
-		InputSchema: inputSchema,
+	// Handle request body
+	var reqBody io.Reader
+	if operation.RequestBody != nil && operation.RequestBody.Content != nil {
+		if mediaType, ok := operation.RequestBody.Content.Get("application/json"); ok && mediaType != nil {
+			bodyParams = make(map[string]interface{})
+			if mediaType.Schema != nil && mediaType.Schema.Schema() != nil {
+				schema := mediaType.Schema.Schema()
+				if schema.Properties != nil {
+					for pair := schema.Properties.First(); pair != nil; pair = pair.Next() {
+						propName := pair.Key()
+						if value, ok := request.Arguments[propName]; ok {
+							bodyParams[propName] = value
+						}
+					}
+				}
+			}
+			if len(bodyParams) > 0 {
+				jsonBody, err := json.Marshal(bodyParams)
+				if err != nil {
+					if s.logger != nil {
+						s.logger.Error("failed to marshal request body", "error", err)
+					}
+					return nil, jsonrpc.NewError(jsonrpc.ErrInvalidParams, err)
+				}
+				reqBody = bytes.NewReader(jsonBody)
+			}
+		}
 	}
+
+	// Add query parameters to URL
+	if len(queryParams) > 0 {
+		u.RawQuery = queryParams.Encode()
+	}
+
+	// Create and send request
+	req, err := http.NewRequest(method, u.String(), reqBody)
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Error("failed to create request", "error", err)
+		}
+		return nil, jsonrpc.NewError(jsonrpc.ErrInternal, err)
+	}
+
+	// Add headers
+	for key, values := range headerParams {
+		for _, value := range values {
+			req.Header.Add(key, value)
+		}
+	}
+
+	if reqBody != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if s.authHeader != "" {
+		req.Header.Set("Authorization", s.authHeader)
+	}
+
+	// Send request
+	resp, err := s.client.Do(req)
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Error("failed to send request", "error", err)
+		}
+		return nil, jsonrpc.NewError(jsonrpc.ErrInternal, err)
+	}
+	defer resp.Body.Close()
+
+	// Read response
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Error("failed to read response body", "error", err)
+		}
+		return nil, jsonrpc.NewError(jsonrpc.ErrInternal, err)
+	}
+
+	// Handle error responses
+	if resp.StatusCode >= 400 {
+		if s.logger != nil {
+			s.logger.Error("request failed",
+				"status", resp.StatusCode,
+				"body", string(body))
+		}
+		textContent := NewTextContent(fmt.Sprintf("Request failed with status %d: %s", resp.StatusCode, string(body)), []Role{RoleAssistant}, nil)
+		return nil, jsonrpc.NewError(jsonrpc.ErrInternal, textContent)
+	}
+
+	// Process response based on content type
+	contentType := resp.Header.Get("Content-Type")
+	var content Content
+
+	if strings.HasPrefix(contentType, "image/") {
+		encoded := base64.StdEncoding.EncodeToString(body)
+		content = NewImageContent(encoded, contentType, []Role{RoleAssistant}, nil)
+	} else if strings.Contains(contentType, "application/json") {
+		var prettyJSON bytes.Buffer
+		if err := json.Indent(&prettyJSON, body, "", "  "); err == nil {
+			body = prettyJSON.Bytes()
+		}
+		content = NewTextContent(string(body), []Role{RoleAssistant}, nil)
+	} else {
+		content = NewTextContent(string(body), []Role{RoleAssistant}, nil)
+	}
+
+	return &ToolCallResponse{
+		Content: []Content{content},
+		IsError: false,
+	}, nil
+}
+
+func (s *Server) handlePing(request *PingRequest) (*PingResponse, error) {
+	return &PingResponse{}, nil
+}
+
+func (s *Server) findOperation(model *v3.Document, operationId string) (method, path string, operation *v3.Operation, found bool) {
+	if model.Paths == nil || model.Paths.PathItems == nil {
+		return "", "", nil, false
+	}
+
+	for pair := model.Paths.PathItems.First(); pair != nil; pair = pair.Next() {
+		pathStr := pair.Key()
+		pathItem := pair.Value()
+
+		operations := []struct {
+			method string
+			op     *v3.Operation
+		}{
+			{"GET", pathItem.Get},
+			{"POST", pathItem.Post},
+			{"PUT", pathItem.Put},
+			{"DELETE", pathItem.Delete},
+			{"PATCH", pathItem.Patch},
+		}
+
+		for _, op := range operations {
+			if op.op != nil && op.op.OperationId == operationId {
+				return op.method, pathStr, op.op, true
+			}
+		}
+	}
+	return "", "", nil, false
 }

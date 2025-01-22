@@ -12,71 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const testOpenAPISpec = `{
-  "openapi": "3.0.0",
-  "info": {
-    "title": "Test API",
-    "version": "1.0.0"
-  },
-  "servers": [
-    {
-      "url": "http://api.example.com"
-    }
-  ],
-  "paths": {
-    "/pets": {
-      "get": {
-        "operationId": "listPets",
-        "summary": "List all pets",
-        "description": "Returns all pets from the system"
-      },
-      "post": {
-        "operationId": "createPet",
-        "summary": "Create a pet",
-        "description": "Creates a new pet in the system",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string"
-                  },
-                  "age": {
-                    "type": "integer"
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/pets/image": {
-      "get": {
-        "operationId": "getPetImage",
-        "summary": "Get a pet's image",
-        "description": "Returns a pet's image in PNG format",
-        "responses": {
-          "200": {
-            "description": "A pet image",
-            "content": {
-              "image/png": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}`
-
 func newTestSpec(serverURL string) []byte {
 	spec := map[string]interface{}{
 		"openapi": "3.0.0",
@@ -93,6 +28,10 @@ func newTestSpec(serverURL string) []byte {
 					"operationId": "listPets",
 					"summary":     "List all pets",
 					"description": "Returns all pets from the system",
+					"parameters": []map[string]interface{}{
+						{"name": "limit", "in": "query", "description": "Maximum number of pets to return", "schema": map[string]interface{}{"type": "integer"}},
+						{"name": "type", "in": "query", "description": "Type of pets to filter by", "schema": map[string]interface{}{"type": "string"}},
+					},
 				},
 				"post": map[string]interface{}{
 					"operationId": "createPet",
@@ -154,31 +93,66 @@ func setupTestServer(t *testing.T) (*Server, *httptest.Server) {
 	// Create a small test image
 	imgData := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A} // PNG header
 
-	// Create a test HTTP server
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	var ts *httptest.Server
+	ts = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/openapi.json":
-			w.Write([]byte(testOpenAPISpec))
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(newTestSpec(ts.URL))
 		case "/pets":
+			w.Header().Set("Content-Type", "application/json")
 			switch r.Method {
 			case "GET":
-				json.NewEncoder(w).Encode([]map[string]interface{}{
-					{"id": 1, "name": "Fluffy"},
-					{"id": 2, "name": "Rover"},
-				})
+				// Verify query parameters are present
+				limit := r.URL.Query().Get("limit")
+				petType := r.URL.Query().Get("type")
+				assert.Equal(t, "5", limit)
+				assert.Equal(t, "dog", petType)
+
+				pets := []map[string]interface{}{
+					{"id": 1, "name": "Fluffy", "type": "dog"},
+					{"id": 2, "name": "Rover", "type": "dog"},
+				}
+				err := json.NewEncoder(w).Encode(pets)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
 			case "POST":
+				// Verify Content-Type header
+				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+
 				var pet map[string]interface{}
-				json.NewDecoder(r.Body).Decode(&pet)
+				if err := json.NewDecoder(r.Body).Decode(&pet); err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+					return
+				}
+
+				// Verify request body parameters
+				assert.Equal(t, "Whiskers", pet["name"])
+				assert.Equal(t, float64(5), pet["age"])
+
+				// Add ID and return
 				pet["id"] = 3
-				json.NewEncoder(w).Encode(pet)
+				err := json.NewEncoder(w).Encode(pet)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
 			}
 		case "/pets/image":
 			w.Header().Set("Content-Type", "image/png")
-			w.Write(imgData)
+			_, err := w.Write(imgData)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		default:
+			http.NotFound(w, r)
 		}
 	}))
 
-	// Create a server instance with the test server URL
+	// Create a server instance with the test server URL and spec
 	server, err := NewServer(
 		WithClient(ts.Client()),
 		WithServerInfo("Test API", "1.0.0"),
@@ -272,9 +246,13 @@ func TestHandleToolsList(t *testing.T) {
 	assert.Equal(t, 1, response.ID.Value())
 	assert.Nil(t, response.Error)
 
-	// Verify tools list
-	toolsResp, ok := response.Result.(ToolsListResponse)
-	assert.True(t, ok)
+	// Convert response.Result to ToolsListResponse
+	var toolsResp ToolsListResponse
+	resultBytes, err := json.Marshal(response.Result)
+	require.NoError(t, err)
+	err = json.Unmarshal(resultBytes, &toolsResp)
+	require.NoError(t, err)
+
 	assert.Len(t, toolsResp.Tools, 3) // GET and POST /pets, plus GET /pets/image
 
 	// Verify GET operation
@@ -318,51 +296,78 @@ func TestHandleToolsCall(t *testing.T) {
 		validate func(*testing.T, jsonrpc.Response)
 	}{
 		{
-			name:    "GET request by operationId",
-			request: jsonrpc.NewRequest("tools/call", json.RawMessage(`{"name": "listPets"}`), 1),
+			name:    "GET request with query parameters",
+			request: jsonrpc.NewRequest("tools/call", json.RawMessage(`{"name": "listPets", "arguments": {"limit": 5, "type": "dog"}}`), 1),
 			validate: func(t *testing.T, response jsonrpc.Response) {
 				assert.Equal(t, "2.0", response.Version)
 				assert.Equal(t, 1, response.ID.Value())
 				assert.Nil(t, response.Error)
 
-				result, ok := response.Result.(CallToolResult)
-				assert.True(t, ok)
+				// Convert response.Result to ToolCallResponse
+				var result ToolCallResponse
+				resultBytes, err := json.Marshal(response.Result)
+				require.NoError(t, err)
+				err = json.Unmarshal(resultBytes, &result)
+				require.NoError(t, err)
+
 				assert.Len(t, result.Content, 1)
 				assert.False(t, result.IsError)
 
-				content, ok := result.Content[0].(TextContent)
-				assert.True(t, ok)
+				content := result.Content[0]
 				assert.Equal(t, "text", content.Type)
 				assert.NotNil(t, content.Annotations)
 				assert.Contains(t, content.Annotations.Audience, RoleAssistant)
 
+				// Unmarshal the response into a TextContent to get the text
+				var textContent Content
+				contentBytes, err := json.Marshal(content)
+				assert.NoError(t, err)
+				err = json.Unmarshal(contentBytes, &textContent)
+				assert.NoError(t, err)
+
 				var pets []interface{}
-				err := json.Unmarshal([]byte(content.Text), &pets)
+				err = json.Unmarshal([]byte(textContent.Text), &pets)
 				assert.NoError(t, err)
 				assert.Len(t, pets, 2)
+
+				// Verify the returned pets have the correct type
+				for _, pet := range pets {
+					petMap := pet.(map[string]interface{})
+					assert.Equal(t, "dog", petMap["type"])
+				}
 			},
 		},
 		{
-			name:    "POST request by operationId",
+			name:    "POST request with body parameters",
 			request: jsonrpc.NewRequest("tools/call", json.RawMessage(`{"name": "createPet", "arguments": {"name": "Whiskers", "age": 5}}`), 2),
 			validate: func(t *testing.T, response jsonrpc.Response) {
 				assert.Equal(t, "2.0", response.Version)
 				assert.Equal(t, 2, response.ID.Value())
 				assert.Nil(t, response.Error)
 
-				result, ok := response.Result.(CallToolResult)
-				assert.True(t, ok)
+				// Convert response.Result to ToolCallResponse
+				var result ToolCallResponse
+				resultBytes, err := json.Marshal(response.Result)
+				require.NoError(t, err)
+				err = json.Unmarshal(resultBytes, &result)
+				require.NoError(t, err)
+
 				assert.Len(t, result.Content, 1)
 				assert.False(t, result.IsError)
 
-				content, ok := result.Content[0].(TextContent)
-				assert.True(t, ok)
+				content := result.Content[0]
 				assert.Equal(t, "text", content.Type)
 				assert.NotNil(t, content.Annotations)
 				assert.Contains(t, content.Annotations.Audience, RoleAssistant)
 
+				var textContent Content
+				contentBytes, err := json.Marshal(content)
+				assert.NoError(t, err)
+				err = json.Unmarshal(contentBytes, &textContent)
+				assert.NoError(t, err)
+
 				var pet map[string]interface{}
-				err := json.Unmarshal([]byte(content.Text), &pet)
+				err = json.Unmarshal([]byte(textContent.Text), &pet)
 				assert.NoError(t, err)
 				assert.Equal(t, "Whiskers", pet["name"])
 				assert.Equal(t, float64(5), pet["age"])
@@ -371,36 +376,46 @@ func TestHandleToolsCall(t *testing.T) {
 		},
 		{
 			name:    "GET image request",
-			request: jsonrpc.NewRequest("tools/call", json.RawMessage(`{"name": "getPetImage"}`), 4),
+			request: jsonrpc.NewRequest("tools/call", json.RawMessage(`{"name": "getPetImage"}`), 3),
 			validate: func(t *testing.T, response jsonrpc.Response) {
 				assert.Equal(t, "2.0", response.Version)
-				assert.Equal(t, 4, response.ID.Value())
+				assert.Equal(t, 3, response.ID.Value())
 				assert.Nil(t, response.Error)
 
-				result, ok := response.Result.(CallToolResult)
-				assert.True(t, ok)
+				// Convert response.Result to ToolCallResponse
+				var result ToolCallResponse
+				resultBytes, err := json.Marshal(response.Result)
+				require.NoError(t, err)
+				err = json.Unmarshal(resultBytes, &result)
+				require.NoError(t, err)
+
 				assert.Len(t, result.Content, 1)
 				assert.False(t, result.IsError)
 
-				content, ok := result.Content[0].(ImageContent)
-				assert.True(t, ok)
+				content := result.Content[0]
 				assert.Equal(t, "image", content.Type)
 				assert.NotNil(t, content.Annotations)
 				assert.Contains(t, content.Annotations.Audience, RoleAssistant)
-				assert.Equal(t, "image/png", content.MimeType)
 
-				// Decode base64 data
-				decoded, err := base64.StdEncoding.DecodeString(content.Data)
+				var imageContent Content
+				contentBytes, err := json.Marshal(content)
+				assert.NoError(t, err)
+				err = json.Unmarshal(contentBytes, &imageContent)
+				assert.NoError(t, err)
+
+				assert.Equal(t, "image/png", imageContent.MimeType)
+
+				decoded, err := base64.StdEncoding.DecodeString(imageContent.Data)
 				assert.NoError(t, err)
 				assert.Equal(t, imgData, decoded)
 			},
 		},
 		{
 			name:    "Request with invalid operationId",
-			request: jsonrpc.NewRequest("tools/call", json.RawMessage(`{"name": "nonexistentOperation"}`), 3),
+			request: jsonrpc.NewRequest("tools/call", json.RawMessage(`{"name": "nonexistentOperation"}`), 4),
 			validate: func(t *testing.T, response jsonrpc.Response) {
 				assert.Equal(t, "2.0", response.Version)
-				assert.Equal(t, 3, response.ID.Value())
+				assert.Equal(t, 4, response.ID.Value())
 				assert.Equal(t, jsonrpc.ErrMethodNotFound, response.Error.Code)
 				assert.Equal(t, "Method not found", response.Error.Message)
 			},
