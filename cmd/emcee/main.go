@@ -84,7 +84,7 @@ The spec-path-or-url argument can be:
 					auth = "Bearer " + parts[0]
 				} else if len(parts) == 2 {
 					// Scheme and token provided, use as-is
-					auth = parts[0] + " " + parts[1]
+					auth = fmt.Sprintf("%s %s", parts[0], parts[1])
 				}
 
 				headers := http.Header{}
