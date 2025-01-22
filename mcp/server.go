@@ -16,8 +16,6 @@ import (
 	"github.com/loopwork-ai/emcee/jsonrpc"
 )
 
-const ModelContextProtocolVersion = "2024-11-05"
-
 // ServerOption configures a Server
 type ServerOption func(*Server) error
 
@@ -165,7 +163,7 @@ func (s *Server) handleRequest(request jsonrpc.Request) jsonrpc.Response {
 
 func (s *Server) handleInitialize(request jsonrpc.Request) jsonrpc.Response {
 	response := InitializeResponse{
-		ProtocolVersion: ModelContextProtocolVersion,
+		ProtocolVersion: Version,
 		Capabilities: ServerCapabilities{
 			Tools: struct {
 				ListChanged bool `json:"listChanged"`
