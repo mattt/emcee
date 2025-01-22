@@ -458,6 +458,7 @@ func (s *Server) handleToolsCall(request *ToolCallRequest) (*ToolCallResponse, e
 	contentType := resp.Header.Get("Content-Type")
 	var content Content
 
+	// Create content based on response content type
 	if strings.HasPrefix(contentType, "image/") {
 		encoded := base64.StdEncoding.EncodeToString(body)
 		content = NewImageContent(encoded, contentType, []Role{RoleAssistant}, nil)

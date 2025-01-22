@@ -77,11 +77,22 @@ The spec-path-or-url argument can be:
 
 			// Set default headers if auth is provided
 			if auth != "" {
+				parts := strings.SplitN(auth, " ", 2)
+				if len(parts) == 1 {
+					// Only token provided, add Bearer prefix
+					logger.Warn("no auth scheme provided, automatically adding 'Bearer' prefix")
+					auth = "Bearer " + parts[0]
+				} else if len(parts) == 2 {
+					// Scheme and token provided, use as-is
+					auth = parts[0] + " " + parts[1]
+				}
+
+				headers := http.Header{}
+				headers.Add("Authorization", auth)
+
 				retryClient.HTTPClient.Transport = &internal.HeaderTransport{
-					Base: retryClient.HTTPClient.Transport,
-					Headers: http.Header{
-						"Authorization": []string{auth},
-					},
+					Base:    retryClient.HTTPClient.Transport,
+					Headers: headers,
 				}
 			}
 
