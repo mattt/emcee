@@ -231,27 +231,58 @@ func (s *Server) handleToolsList(request *ToolsListRequest) (*ToolsListResponse,
 			inputSchema := InputSchema{
 				Type:       "object",
 				Properties: make(map[string]interface{}),
+				Required:   []string{},
 			}
 
-			// Add parameters to schema
-			if op.op.Parameters != nil {
-				for _, param := range op.op.Parameters {
-					if param.Schema != nil && param.Schema.Schema() != nil {
-						schema := param.Schema.Schema()
-						schemaType := "string"
-						if len(schema.Type) > 0 {
-							schemaType = schema.Type[0]
+			// Add path parameters
+			if pathItem.Parameters != nil {
+				for _, param := range pathItem.Parameters {
+					if param != nil && param.Schema != nil {
+						schema := make(map[string]interface{})
+						if paramSchema := param.Schema.Schema(); paramSchema != nil {
+							schemaType := "string" // default to string if not specified
+							if len(paramSchema.Type) > 0 {
+								schemaType = paramSchema.Type[0]
+							}
+							schema["type"] = schemaType
+							if paramSchema.Pattern != "" {
+								schema["pattern"] = paramSchema.Pattern
+							}
 						}
-						inputSchema.Properties[param.Name] = map[string]interface{}{
-							"type":        schemaType,
-							"description": param.Description,
-							"in":          param.In,
+						schema["description"] = param.Description
+						inputSchema.Properties[param.Name] = schema
+						if param.Required != nil && *param.Required {
+							inputSchema.Required = append(inputSchema.Required, param.Name)
 						}
 					}
 				}
 			}
 
-			// Add request body to schema if it exists
+			// Add operation parameters
+			if op.op.Parameters != nil {
+				for _, param := range op.op.Parameters {
+					if param != nil && param.Schema != nil {
+						schema := make(map[string]interface{})
+						if paramSchema := param.Schema.Schema(); paramSchema != nil {
+							schemaType := "string" // default to string if not specified
+							if len(paramSchema.Type) > 0 {
+								schemaType = paramSchema.Type[0]
+							}
+							schema["type"] = schemaType
+							if paramSchema.Pattern != "" {
+								schema["pattern"] = paramSchema.Pattern
+							}
+						}
+						schema["description"] = param.Description
+						inputSchema.Properties[param.Name] = schema
+						if param.Required != nil && *param.Required {
+							inputSchema.Required = append(inputSchema.Required, param.Name)
+						}
+					}
+				}
+			}
+
+			// Add request body if present
 			if op.op.RequestBody != nil && op.op.RequestBody.Content != nil {
 				if mediaType, ok := op.op.RequestBody.Content.Get("application/json"); ok && mediaType != nil {
 					if mediaType.Schema != nil && mediaType.Schema.Schema() != nil {
@@ -268,13 +299,12 @@ func (s *Server) handleToolsList(request *ToolsListRequest) (*ToolsListResponse,
 									inputSchema.Properties[propName] = map[string]interface{}{
 										"type":        schemaType,
 										"description": propSchema.Description,
-										"in":          "body",
 									}
 								}
 							}
-						}
-						if schema.Required != nil {
-							inputSchema.Required = schema.Required
+							if schema.Required != nil {
+								inputSchema.Required = append(inputSchema.Required, schema.Required...)
+							}
 						}
 					}
 				}
@@ -297,7 +327,7 @@ func (s *Server) handleToolsList(request *ToolsListRequest) (*ToolsListResponse,
 }
 
 func (s *Server) handleToolsCall(request *ToolCallRequest) (*ToolCallResponse, error) {
-	method, path, operation, found := s.findOperation(s.model, request.Name)
+	method, path, operation, pathItem, found := s.findOperation(s.model, request.Name)
 	if !found {
 		return nil, jsonrpc.NewError(jsonrpc.ErrMethodNotFound, nil)
 	}
@@ -323,31 +353,53 @@ func (s *Server) handleToolsCall(request *ToolCallRequest) (*ToolCallResponse, e
 	headerParams := make(http.Header)
 	var bodyParams map[string]interface{}
 
-	// Handle parameters
+	// Handle path item parameters first
+	if pathItem.Parameters != nil {
+		for _, param := range pathItem.Parameters {
+			if param != nil {
+				if value, ok := request.Arguments[param.Name]; ok {
+					switch param.In {
+					case "path":
+						// Replace the parameter placeholder directly without escaping
+						// The value will already be properly escaped by url.URL when the final URL is constructed
+						u.Path = strings.ReplaceAll(u.Path, "{"+param.Name+"}", fmt.Sprint(value))
+					case "query":
+						queryParams.Set(param.Name, fmt.Sprint(value))
+					case "header":
+						headerParams.Add(param.Name, fmt.Sprint(value))
+					}
+				}
+			}
+		}
+	}
+
+	// Handle operation parameters
 	if operation.Parameters != nil {
 		for _, param := range operation.Parameters {
-			if value, ok := request.Arguments[param.Name]; ok {
-				switch param.In {
-				case "path":
-					// Use url.PathEscape to properly escape path parameters according to RFC 3986
-					u.Path = strings.ReplaceAll(u.Path, "{"+param.Name+"}", url.PathEscape(fmt.Sprint(value)))
-				case "query":
-					queryParams.Set(param.Name, fmt.Sprint(value))
-				case "header":
-					headerParams.Add(param.Name, fmt.Sprint(value))
+			if param != nil {
+				if value, ok := request.Arguments[param.Name]; ok {
+					switch param.In {
+					case "path":
+						// Replace the parameter placeholder directly without escaping
+						// The value will already be properly escaped by url.URL when the final URL is constructed
+						u.Path = strings.ReplaceAll(u.Path, "{"+param.Name+"}", fmt.Sprint(value))
+					case "query":
+						queryParams.Set(param.Name, fmt.Sprint(value))
+					case "header":
+						headerParams.Add(param.Name, fmt.Sprint(value))
+					}
 				}
 			}
 		}
 	}
 
 	// Handle request body
-	var reqBody io.Reader
 	if operation.RequestBody != nil && operation.RequestBody.Content != nil {
 		if mediaType, ok := operation.RequestBody.Content.Get("application/json"); ok && mediaType != nil {
-			bodyParams = make(map[string]interface{})
 			if mediaType.Schema != nil && mediaType.Schema.Schema() != nil {
 				schema := mediaType.Schema.Schema()
 				if schema.Properties != nil {
+					bodyParams = make(map[string]interface{})
 					for pair := schema.Properties.First(); pair != nil; pair = pair.Next() {
 						propName := pair.Key()
 						if value, ok := request.Arguments[propName]; ok {
@@ -355,13 +407,6 @@ func (s *Server) handleToolsCall(request *ToolCallRequest) (*ToolCallResponse, e
 						}
 					}
 				}
-			}
-			if len(bodyParams) > 0 {
-				jsonBody, err := json.Marshal(bodyParams)
-				if err != nil {
-					return nil, jsonrpc.NewError(jsonrpc.ErrInvalidParams, err)
-				}
-				reqBody = bytes.NewReader(jsonBody)
 			}
 		}
 	}
@@ -372,6 +417,15 @@ func (s *Server) handleToolsCall(request *ToolCallRequest) (*ToolCallResponse, e
 	}
 
 	// Create and send request
+	var reqBody io.Reader
+	if len(bodyParams) > 0 {
+		jsonBody, err := json.Marshal(bodyParams)
+		if err != nil {
+			return nil, jsonrpc.NewError(jsonrpc.ErrInvalidParams, err)
+		}
+		reqBody = bytes.NewReader(jsonBody)
+	}
+
 	req, err := http.NewRequest(method, u.String(), reqBody)
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.ErrInternal, err)
@@ -437,31 +491,31 @@ func (s *Server) handlePing(request *PingRequest) (*PingResponse, error) {
 	return &PingResponse{}, nil
 }
 
-func (s *Server) findOperation(model *v3.Document, operationId string) (method, path string, operation *v3.Operation, found bool) {
+func (s *Server) findOperation(model *v3.Document, operationId string) (method, path string, operation *v3.Operation, pathItem *v3.PathItem, found bool) {
 	if model.Paths == nil || model.Paths.PathItems == nil {
-		return "", "", nil, false
+		return "", "", nil, nil, false
 	}
 
 	for pair := model.Paths.PathItems.First(); pair != nil; pair = pair.Next() {
 		pathStr := pair.Key()
-		pathItem := pair.Value()
+		item := pair.Value()
 
 		operations := []struct {
 			method string
 			op     *v3.Operation
 		}{
-			{"GET", pathItem.Get},
-			{"POST", pathItem.Post},
-			{"PUT", pathItem.Put},
-			{"DELETE", pathItem.Delete},
-			{"PATCH", pathItem.Patch},
+			{"GET", item.Get},
+			{"POST", item.Post},
+			{"PUT", item.Put},
+			{"DELETE", item.Delete},
+			{"PATCH", item.Patch},
 		}
 
 		for _, op := range operations {
 			if op.op != nil && op.op.OperationId == operationId {
-				return op.method, pathStr, op.op, true
+				return op.method, pathStr, op.op, item, true
 			}
 		}
 	}
-	return "", "", nil, false
+	return "", "", nil, nil, false
 }
