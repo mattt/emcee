@@ -1,13 +1,5 @@
 package mcp
 
-import (
-	"fmt"
-	"net/http"
-	"strings"
-
-	"github.com/pb33f/libopenapi"
-)
-
 // ServerInfo represents information about the server implementation
 type ServerInfo struct {
 	Name    string `json:"name"`
@@ -129,61 +121,5 @@ func NewImageContent(data string, mimeType string, audience []Role, priority *fl
 		},
 		Data:     data,
 		MimeType: mimeType,
-	}
-}
-
-// ServerOption configures a Server
-type ServerOption func(*Server) error
-
-// WithAuth sets the authorization header
-func WithAuth(auth string) ServerOption {
-	return func(s *Server) error {
-		s.authHeader = auth
-		return nil
-	}
-}
-
-// WithClient sets the HTTP client
-func WithClient(client *http.Client) ServerOption {
-	return func(s *Server) error {
-		s.client = client
-		return nil
-	}
-}
-
-// WithServerInfo sets custom server info
-func WithServerInfo(name, version string) ServerOption {
-	return func(s *Server) error {
-		s.info = ServerInfo{
-			Name:    name,
-			Version: version,
-		}
-		return nil
-	}
-}
-
-// WithSpecData sets the OpenAPI spec directly from bytes
-func WithSpecData(data []byte) ServerOption {
-	return func(s *Server) error {
-		doc, err := libopenapi.NewDocument(data)
-		if err != nil {
-			return fmt.Errorf("error parsing OpenAPI spec: %v", err)
-		}
-
-		s.doc = doc
-		model, errs := doc.BuildV3Model()
-		if len(errs) > 0 {
-			return fmt.Errorf("error building OpenAPI model: %v", errs[0])
-		}
-
-		s.model = &model.Model
-
-		// Require server URL information
-		if len(model.Model.Servers) == 0 || model.Model.Servers[0].URL == "" {
-			return fmt.Errorf("OpenAPI spec must include at least one server URL")
-		}
-		s.baseURL = strings.TrimSuffix(model.Model.Servers[0].URL, "/")
-
-		return nil
 	}
 }

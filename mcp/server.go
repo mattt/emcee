@@ -16,6 +16,70 @@ import (
 	"github.com/loopwork-ai/emcee/jsonrpc"
 )
 
+// ServerOption configures a Server
+type ServerOption func(*Server) error
+
+// WithAuth sets the HTTP Authorization header
+func WithAuth(auth string) ServerOption {
+	return func(s *Server) error {
+		s.authHeader = auth
+		return nil
+	}
+}
+
+// WithClient sets the HTTP client
+func WithClient(client *http.Client) ServerOption {
+	return func(s *Server) error {
+		s.client = client
+		return nil
+	}
+}
+
+// WithServerInfo sets server info
+func WithServerInfo(name, version string) ServerOption {
+	return func(s *Server) error {
+		s.info = ServerInfo{
+			Name:    name,
+			Version: version,
+		}
+		return nil
+	}
+}
+
+// WithSpecData sets the OpenAPI spec from a byte slice
+func WithSpecData(data []byte) ServerOption {
+	return func(s *Server) error {
+		doc, err := libopenapi.NewDocument(data)
+		if err != nil {
+			return fmt.Errorf("error parsing OpenAPI spec: %v", err)
+		}
+
+		s.doc = doc
+		model, errs := doc.BuildV3Model()
+		if len(errs) > 0 {
+			return fmt.Errorf("error building OpenAPI model: %v", errs[0])
+		}
+
+		s.model = &model.Model
+
+		// Require server URL information
+		if len(model.Model.Servers) == 0 || model.Model.Servers[0].URL == "" {
+			return fmt.Errorf("OpenAPI spec must include at least one server URL")
+		}
+		s.baseURL = strings.TrimSuffix(model.Model.Servers[0].URL, "/")
+
+		return nil
+	}
+}
+
+// WithLogger sets the logger for the server
+func WithLogger(logger *slog.Logger) ServerOption {
+	return func(s *Server) error {
+		s.logger = logger
+		return nil
+	}
+}
+
 // Server represents an MCP server that processes JSON-RPC requests
 type Server struct {
 	doc        libopenapi.Document
@@ -27,32 +91,12 @@ type Server struct {
 	logger     *slog.Logger
 }
 
-// Start logs that the server is ready to accept requests
-func (s *Server) Start() {
-	if s.logger != nil {
-		s.logger.Info("server started",
-			"name", s.info.Name,
-			"version", s.info.Version)
-		if s.baseURL != "" {
-			s.logger.Info("server configuration",
-				"base_url", s.baseURL)
-		}
-	}
-}
-
-// Shutdown logs that the server is shutting down
-func (s *Server) Shutdown() {
-	if s.logger != nil {
-		s.logger.Info("server shutting down")
-	}
-}
-
 // NewServer creates a new MCP server instance
 func NewServer(opts ...ServerOption) (*Server, error) {
 	s := &Server{
 		client: http.DefaultClient,
 		info: ServerInfo{
-			Name:    "openapi-mcp",
+			Name:    "emcee",
 			Version: "0.1.0",
 		},
 	}
@@ -389,13 +433,5 @@ func createTool(method string, path string, operation *v3.Operation) Tool {
 		Name:        name,
 		Description: description,
 		InputSchema: inputSchema,
-	}
-}
-
-// WithLogger creates a new server option to enable structured logging
-func WithLogger(logger *slog.Logger) ServerOption {
-	return func(s *Server) error {
-		s.logger = logger
-		return nil
 	}
 }
