@@ -221,13 +221,6 @@ func (s *Server) handleToolsList(request jsonrpc.Request) jsonrpc.Response {
 	return jsonrpc.NewResponse(request.ID, ToolsListResponse{Tools: tools}, nil)
 }
 
-// applyAuthHeaders applies authentication headers to the request based on the server's auth configuration
-func (s *Server) applyAuthHeaders(req *http.Request) {
-	if s.authHeader != "" {
-		req.Header.Set("Authorization", s.authHeader)
-	}
-}
-
 func (s *Server) handleToolsCall(request jsonrpc.Request) jsonrpc.Response {
 	var params ToolCallParams
 	if err := json.Unmarshal(request.Params, &params); err != nil {
@@ -284,7 +277,9 @@ func (s *Server) handleToolsCall(request jsonrpc.Request) jsonrpc.Response {
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	s.applyAuthHeaders(req)
+	if s.authHeader != "" {
+		req.Header.Set("Authorization", s.authHeader)
+	}
 
 	if s.logger != nil {
 		s.logger.Info("making HTTP request",
