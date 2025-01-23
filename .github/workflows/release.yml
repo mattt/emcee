@@ -9,9 +9,6 @@ permissions:
   contents: write
   packages: write
 
-env:
-  GH_PAT: ${{ secrets.GH_PAT }}
-
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
@@ -32,3 +29,4 @@ jobs:
           args: release --rm-dist
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }} # used to update Homebrew formula
