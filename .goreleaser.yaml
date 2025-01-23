@@ -24,3 +24,10 @@ archives:
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
+
+brews:
+  - repository:
+      owner: loopwork-ai
+      name: emcee
+      token: "{{ .Env.GH_PAT }}"
+    directory: Formula
