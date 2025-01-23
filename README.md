@@ -92,7 +92,7 @@ Click on that to see a list of all the tools made available to Claude through MC
 
 ## Usage
 
-```console
+```
 Usage:
   emcee [spec-path-or-url] [flags]
 
@@ -194,3 +194,15 @@ by sending JSON-RPC requests.
 ```
 
 </details>
+
+## Debugging
+
+```console
+npx @modelcontextprotocol/inspector emcee https://api.weather.gov
+# 🔍 MCP Inspector is up and running at http://localhost:5173 🚀
+```
+
+```console
+open http://localhost:5173
+```
+
