@@ -1,3 +1,5 @@
+# emcee
+
 **emcee** is a tool that provides a [Model Context Protocol (MCP)][mcp] server
 for any web application with an [OpenAPI][openapi] specification.
 You can use emcee to connect [Claude Desktop][claude] and [other apps][mcp-clients]
@@ -31,7 +33,7 @@ Claude will consult the tools made available to it through MCP
 and request to use one if deemed to be suitable for answering your question.
 You can review this request and either approve or deny it.
 
-![Allow tool from weather MCP dialog](https://github.com/user-attachments/assets/394ac476-17c2-4a29-aaff-9537d42b289b)
+<img src="https://github.com/user-attachments/assets/394ac476-17c2-4a29-aaff-9537d42b289b" alt="Allow tool from weather MCP dialog" width="460">
 
 If approved, Claude will communicate with the MCP
 and use the result to inform its response.
