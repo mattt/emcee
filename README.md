@@ -35,7 +35,7 @@ You can review this request and either approve or deny it.
 
 <img src="https://github.com/user-attachments/assets/394ac476-17c2-4a29-aaff-9537d42b289b" alt="Allow tool from weather MCP dialog" width="460">
 
-If approved, Claude will communicate with the MCP
+If you allow it, Claude will communicate with the MCP
 and use the result to inform its response.
 
 ![Claude response with MCP tool use](https://github.com/user-attachments/assets/d5b63002-1ed3-4b03-bc71-8357427bb06b)
