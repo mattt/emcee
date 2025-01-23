@@ -9,6 +9,9 @@ permissions:
   contents: write
   packages: write
 
+env:
+  GH_PAT: ${{ secrets.GH_PAT }}
+
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
