@@ -30,6 +30,7 @@ Edit your `claude_desktop_config.json` to add a new `mcpServers` entry. In this 
 To use an API that requires authentication, use the `--auth` flag. 
 
 ```json
+{
     "mcpServers": {
         "x (formerly twitter)": {
             "command": "~/emcee",
@@ -40,6 +41,7 @@ To use an API that requires authentication, use the `--auth` flag.
             ]
         }
     }
+}
 ```
 
 
