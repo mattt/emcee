@@ -16,7 +16,7 @@ builds:
     main: ./cmd/emcee
 
 archives:
-  - format: tar.gz
+  - formats: [tar.gz]
     name_template: >-
       {{ .ProjectName }}_
       {{- title .Os }}_
