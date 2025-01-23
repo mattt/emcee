@@ -104,6 +104,8 @@ The spec-path-or-url argument can be:
 			var specData []byte
 			var err error
 
+			// Match http/s
+    			urlPattern := regexp.MustCompile(`^https?://`)
 			if args[0] == "-" {
 				logger.Info("reading spec from stdin")
 
@@ -121,7 +123,7 @@ The spec-path-or-url argument can be:
 				if err != nil {
 					return fmt.Errorf("error reading OpenAPI spec from stdin: %w", err)
 				}
-			} else if strings.HasPrefix(args[0], "http://") || strings.HasPrefix(args[0], "https://") {
+			} else if urlPattern.MatchString(args[0]) {
 				logger.Info("reading spec from URL", "url", args[0])
 
 				// Create HTTP request
