@@ -31,3 +31,18 @@ brews:
       name: emcee
       token: "{{ .Env.GH_PAT }}"
     directory: Formula
+
+kos:
+  - platforms:
+      - linux/amd64
+      - linux/arm64
+    tags:
+      - latest
+      - '{{ .Tag }}'
+    bare: true
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -extldflags "-static"
+      - -X main.Version={{.Tag}}

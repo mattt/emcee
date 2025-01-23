@@ -30,3 +30,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_PAT: ${{ secrets.GH_PAT }} # used to update Homebrew formula
+          KO_DOCKER_REPO: ghcr.io/${{ github.repository_owner }}/emcee
