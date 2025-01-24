@@ -1,0 +1,26 @@
+{
+  "mcpServers": {
+    "weather": {
+      "command": "emcee",
+      "args": [
+        "https://api.weather.gov/openapi.json"
+      ]
+    },
+    "x (formerly twitter)": {
+      "command": "emcee",
+      "args": [
+        "https://api.x.com/2/openapi.json",
+        "--auth",
+        "Bearer $X_API_KEY"
+      ]
+    },
+    "openai": {
+      "command": "emcee",
+      "args": [
+        "https://raw.githubusercontent.com/openai/openai-openapi/refs/heads/master/openapi.yaml",
+        "--auth",
+        "Bearer $OPEN_AI_API_KEY"
+      ]
+    }
+  }
+}
