@@ -61,6 +61,12 @@ without a dashboard or client library.
 
 ---
 
+> [!TIP]
+> Are you building agents? 
+> Reach out to us at emcee@loopwork.com 
+
+---
+
 ## Installation
 
 ### Installer Script
