@@ -62,9 +62,9 @@ without a dashboard or client library.
 ---
 
 > [!TIP]
-> Building agents?
-> Want to deploy remote MCPs?
-> Reach out to us at emcee@loopwork.com
+> Building agents?  
+> Want to deploy remote MCPs?  
+> Reach out to us at emcee@loopwork.com  
 
 ---
 
