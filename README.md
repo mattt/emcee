@@ -46,6 +46,14 @@ and use the result to inform its response.
 
 ![Claude response with MCP tool use](https://github.com/user-attachments/assets/d5b63002-1ed3-4b03-bc71-8357427bb06b)
 
+---
+
+> [!TIP]
+> Building agents? Want to deploy remote MCP servers?  
+> Reach out to us at emcee@loopwork.com  
+
+---
+
 ## Why use emcee?
 
 MCP provides a standardized way to connect AI models to tools and data sources.
@@ -59,13 +67,6 @@ Got a web app with an OpenAPI spec?
 You might be surprised how far you can get
 without a dashboard or client library.
 
----
-
-> [!TIP]
-> Building agents? Want to deploy remote MCPs?  
-> Reach out to us at emcee@loopwork.com  
-
----
 
 ## Installation
 
