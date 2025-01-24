@@ -11,7 +11,7 @@ similar to [ChatGPT plugins][chatgpt-plugins].
 If you're on macOS 15 and have [Homebrew][homebrew] installed,
 you can get up-and-running with a few commands:
 
-```sh
+```bash
 # Install emcee
 brew install loopwork-ai/tap/emcee
 
@@ -78,7 +78,7 @@ sh <(curl -fsSL https://raw.githubusercontent.com/loopwork-ai/emcee/refs/heads/m
 
 Install emcee using [Homebrew][homebrew] from [Loopwork's tap][homebrew-tap].
 
-```sh
+```console
 brew install loopwork-ai/tap/emcee
 ```
 
@@ -86,7 +86,7 @@ brew install loopwork-ai/tap/emcee
 
 Prebuilt [Docker images][docker-images] with emcee are available.
 
-```sh
+```console
 docker run -it ghcr.io/loopwork-ai/emcee
 ```
 
@@ -94,7 +94,7 @@ docker run -it ghcr.io/loopwork-ai/emcee
 
 Requires [go 1.23][golang] or later.
 
-```sh
+```console
 git clone https://github.com/loopwork-ai/emcee.git
 cd emcee
 go build -o emcee cmd/emcee/main.go
@@ -115,7 +115,7 @@ To configure Claude Desktop for use with emcee:
 The configuration file should be located in the Application Support directory.
 You can open it directly in VSCode using:
 
-```sh
+```console
 code ~/Library/Application\ Support/Claude/claude_desktop_config.json
 ```
 
