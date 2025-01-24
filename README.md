@@ -266,6 +266,10 @@ npx @modelcontextprotocol/inspector emcee https://api.weather.gov
 open http://localhost:5173
 ```
 
+## License
+
+emcee is licensed under the Apache License, Version 2.0.
+
 [chatgpt-plugins]: https://openai.com/index/chatgpt-plugins/
 [claude]: https://claude.ai/download
 [docker-images]: https://github.com/loopwork-ai/emcee/pkgs/container/emcee
