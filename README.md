@@ -8,12 +8,16 @@ similar to [ChatGPT plugins][chatgpt-plugins].
 
 ## Quickstart
 
-If you're on macOS 15 and have Claude, `brew` and `jq` installed,
+If you're on macOS 15 and have [Homebrew][homebrew] installed,
 you can get up-and-running with a few commands:
 
 ```console
 # Install emcee
 brew install emcee
+
+# Install claude and jq
+brew install --cask claude
+brew install jq # used to update Claude config in next step
 
 # Add MCP server for weather.gov to Claude Desktop
 CLAUDE_CONFIG="~/Library/Application Support/Claude/claude_desktop_config.json" && \
@@ -108,7 +112,7 @@ To configure Claude Desktop for use with emcee:
 
 ![Claude Desktop settings Edit Config button](https://github.com/user-attachments/assets/761c6de5-62c2-4c53-83e6-54362040acd5)
 
-The configuration file is located in the Application Support directory. 
+The configuration file should be located in the Application Support directory.
 You can open it directly in VSCode using:
 
 ```console
