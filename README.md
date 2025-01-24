@@ -68,10 +68,10 @@ a [pre-built release][releases] of emcee for your platform (Linux x86-64/i386/ar
 
 ```console
 # fish
-sh (curl -fsSL https://raw.githubusercontent.com/loopwork-ai/emcee/refs/heads/main/install.sh | psub)
+sh (curl -fsSL https://raw.githubusercontent.com/loopwork-ai/emcee/refs/heads/main/tools/install.sh | psub)
 
 # bash, zsh
-sh <(curl -fsSL https://raw.githubusercontent.com/loopwork-ai/emcee/refs/heads/main/install.sh)
+sh <(curl -fsSL https://raw.githubusercontent.com/loopwork-ai/emcee/refs/heads/main/tools/install.sh)
 ```
 
 ### Homebrew
@@ -276,7 +276,7 @@ emcee is licensed under the Apache License, Version 2.0.
 [golang]: https://go.dev
 [homebrew]: https://brew.sh
 [homebrew-tap]: https://github.com/loopwork-ai/homebrew-tap
-[installer]: https://github.com/loopwork-ai/emcee/blob/main/install.sh
+[installer]: https://github.com/loopwork-ai/emcee/blob/main/tools/install.sh
 [mcp]: https://modelcontextprotocol.io/
 [mcp-clients]: https://modelcontextprotocol.info/docs/clients/
 [mcp-inspector]: https://github.com/modelcontextprotocol/inspector
