@@ -258,7 +258,7 @@ If Claude and/or emcee aren't working as expected,
 the inspector can help you understand what's happening.
 
 ```console
-npx @modelcontextprotocol/inspector emcee https://api.weather.gov
+npx @modelcontextprotocol/inspector emcee https://api.weather.gov/openapi.json
 # 🔍 MCP Inspector is up and running at http://localhost:5173 🚀
 ```
 
