@@ -11,9 +11,9 @@ similar to [ChatGPT plugins][chatgpt-plugins].
 If you're on macOS 15 and have [Homebrew][homebrew] installed,
 you can get up-and-running with a few commands:
 
-```console
+```bash
 # Install emcee
-brew install emcee
+brew install loopwork-ai/tap/emcee
 
 # Install claude and jq
 brew install --cask claude
@@ -142,7 +142,7 @@ Click on that to see a list of all the tools made available to Claude through MC
 
 ## Usage
 
-```
+```console
 Usage:
   emcee [spec-path-or-url] [flags]
 
