@@ -35,7 +35,7 @@ You can review this request and either approve or deny it.
 
 <img src="https://github.com/user-attachments/assets/394ac476-17c2-4a29-aaff-9537d42b289b" alt="Allow tool from weather MCP dialog" width="460">
 
-If you allow it, Claude will communicate with the MCP
+If you allow, Claude will communicate with the MCP
 and use the result to inform its response.
 
 ![Claude response with MCP tool use](https://github.com/user-attachments/assets/d5b63002-1ed3-4b03-bc71-8357427bb06b)
@@ -100,20 +100,22 @@ Once built, you can run in place (`./emcee`) or move it somewhere in your `PATH`
 
 ## Setup
 
-Claude > Settings... (<kbd>⌘</kbd><kbd>,</kbd>)
-Navigate to "Developer" section in sidebar.
-Click "Edit Config" button to reveal config file in Finder.
+To configure Claude Desktop for use with emcee:
+
+1. Open Claude Desktop Settings (<kbd>⌘</kbd><kbd>,</kbd>)
+2. Select the "Developer" section in the sidebar
+3. Click "Edit Config" to open the configuration file
 
 ![Claude Desktop settings Edit Config button](https://github.com/user-attachments/assets/761c6de5-62c2-4c53-83e6-54362040acd5)
 
-At the time of writing, this file is located in a subdirectory of Application Support.
-You can edit it in VSCode with the following command:
+The configuration file is located in the Application Support directory. 
+You can open it directly in VSCode using:
 
 ```console
 code ~/Library/Application\ Support/Claude/claude_desktop_config.json
 ```
 
-Enter the following:
+Add the following configuration to add the weather.gov MCP server:
 
 ```json
 {
@@ -129,7 +131,6 @@ Enter the following:
 ```
 
 After saving the file, quit and re-open Claude.
-
 You should now see <kbd>🔨57</kbd> in the bottom right corner of your chat box.
 Click on that to see a list of all the tools made available to Claude through MCP.
 
@@ -163,7 +164,7 @@ You can interact directly with the provided MCP server
 by sending JSON-RPC requests.
 
 > [!NOTE]
-> emcee provides MCP tool capabilities.
+> emcee provides only MCP tool capabilities.
 > Other features like resources, prompts, and sampling aren't yet supported.
 
 ### Example JSON-RPC Calls
