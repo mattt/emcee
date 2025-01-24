@@ -1,3 +1,5 @@
+![emcee flow diagram](https://github.com/user-attachments/assets/bcac98a5-497f-4b34-9e8d-d4bc08852ea1)
+
 # emcee
 
 **emcee** is a tool that provides a [Model Context Protocol (MCP)][mcp] server
