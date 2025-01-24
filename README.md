@@ -1,4 +1,4 @@
-![emcee flow diagram](readme/emcee-flow.png)
+![emcee flow diagram](https://github.com/user-attachments/assets/bcac98a5-497f-4b34-9e8d-d4bc08852ea1)
 
 # emcee
 
