@@ -130,10 +130,9 @@ The spec-path-or-url argument can be:
 					return fmt.Errorf("error creating request: %w", err)
 				}
 
-				// Apply auth header if provided
-				if auth != "" {
-					req.Header.Set("Authorization", auth)
-				}
+				// NOTE: right now we are not setting auth headers when fetching the schema
+				// as this sometimes caused the request for the schema to fail
+				// TODO: give users a way to speci
 
 				// Make HTTP request
 				resp, err := client.Do(req)
