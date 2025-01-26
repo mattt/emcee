@@ -152,17 +152,26 @@ Click on that to see a list of all the tools made available to Claude through MC
 ## Usage
 
 ```console
+- A local file path (e.g. ./openapi.json)
+- An HTTP(S) URL (e.g. https://api.example.com/openapi.json)
+- "-" to read from stdin
+
+By default, a GET request with no additional headers is made to the spec URL to download the OpenAPI specification.
+If additional authentication is required to download the specification, you can first download it to a local file using your preferred HTTP client with the necessary authentication headers, and then provide the local file path to emcee.
+
 Usage:
   emcee [spec-path-or-url] [flags]
 
 Flags:
-      --auth string        Authorization header value (e.g. 'Bearer token123' or 'Basic dXNlcjpwYXNz')
-  -h, --help               help for emcee
-      --retries int        Maximum number of retries for failed requests (default 3)
-  -r, --rps int            Maximum requests per second (0 for no limit)
-      --timeout duration   HTTP request timeout (default 1m0s)
-  -v, --verbose            Enable verbose logging to stderr
-      --version            version for emcee
+      --basic-auth string    Basic auth value (either user:pass or base64 encoded, will be prefixed with 'Basic ')
+      --bearer-auth string   Bearer token value (will be prefixed with 'Bearer ')
+  -h, --help                 help for emcee
+      --raw-auth string      Raw value for Authorization header
+      --retries int          Maximum number of retries for failed requests (default 3)
+  -r, --rps int              Maximum requests per second (0 for no limit)
+      --timeout duration     HTTP request timeout (default 1m0s)
+  -v, --verbose              Enable verbose logging to stderr
+      --version              version for emcee
 ```
 
 emcee implements [Standard Input/Output (stdio)](https://modelcontextprotocol.io/docs/concepts/transports#standard-input-output-stdio) transport for MCP,
