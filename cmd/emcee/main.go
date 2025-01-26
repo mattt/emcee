@@ -130,11 +130,6 @@ The spec-path-or-url argument can be:
 					return fmt.Errorf("error creating request: %w", err)
 				}
 
-				// Apply auth header if provided
-				if auth != "" {
-					req.Header.Set("Authorization", auth)
-				}
-
 				// Make HTTP request
 				resp, err := client.Do(req)
 				if err != nil {
