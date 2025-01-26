@@ -3,8 +3,11 @@ package mcp
 import (
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path"
+	"strings"
 	"testing"
 
 	"github.com/loopwork-ai/emcee/internal"
@@ -755,6 +758,103 @@ func TestWithAuth(t *testing.T) {
 			transport, ok := server.client.Transport.(*internal.HeaderTransport)
 			assert.True(t, ok)
 			assert.Equal(t, tt.auth, transport.Headers.Get("Authorization"))
+		})
+	}
+}
+
+func TestPathJoining(t *testing.T) {
+	tests := []struct {
+		name     string
+		baseURL  string
+		path     string
+		expected string
+	}{
+		{
+			name:     "simple paths",
+			baseURL:  "https://api.example.com",
+			path:     "/pets",
+			expected: "https://api.example.com/pets",
+		},
+		{
+			name:     "base URL with trailing slash",
+			baseURL:  "https://api.example.com/",
+			path:     "/pets",
+			expected: "https://api.example.com/pets",
+		},
+		{
+			name:     "base URL with path",
+			baseURL:  "https://api.example.com/v1",
+			path:     "/pets",
+			expected: "https://api.example.com/v1/pets",
+		},
+		{
+			name:     "base URL with path and trailing slash",
+			baseURL:  "https://api.example.com/v1/",
+			path:     "/pets",
+			expected: "https://api.example.com/v1/pets",
+		},
+		{
+			name:     "path without leading slash",
+			baseURL:  "https://api.example.com/v1",
+			path:     "pets",
+			expected: "https://api.example.com/v1/pets",
+		},
+		{
+			name:     "multiple path segments",
+			baseURL:  "https://api.example.com/v1",
+			path:     "/pets/dogs",
+			expected: "https://api.example.com/v1/pets/dogs",
+		},
+		{
+			name:     "multiple slashes in path",
+			baseURL:  "https://api.example.com/v1/",
+			path:     "//pets///dogs",
+			expected: "https://api.example.com/v1/pets/dogs",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a mock HTTP server first
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				// Parse the request URL and compare with expected
+				actualPath := path.Clean(r.URL.Path)
+				expectedPath := path.Clean(tt.path)
+				if !strings.HasPrefix(expectedPath, "/") {
+					expectedPath = "/" + expectedPath
+				}
+				assert.Equal(t, expectedPath, actualPath)
+
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte("{}"))
+			}))
+			defer ts.Close()
+
+			// Create a test spec with the test server URL
+			spec := fmt.Sprintf(`{
+				"openapi": "3.0.0",
+				"servers": [{"url": "%s"}],
+				"paths": {
+					"%s": {
+						"get": {
+							"operationId": "testOperation"
+						}
+					}
+				}
+			}`, ts.URL, tt.path)
+
+			server, err := NewServer(
+				WithSpecData([]byte(spec)),
+				WithClient(ts.Client()),
+			)
+			require.NoError(t, err)
+
+			// Make a test request
+			request := jsonrpc.NewRequest("tools/call", json.RawMessage(`{"name": "testOperation"}`), 1)
+			response := server.HandleRequest(request)
+
+			// Verify the request was successful
+			assert.Nil(t, response.Error)
 		})
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"path"
 	"reflect"
 	"strings"
 
@@ -346,7 +347,7 @@ func (s *Server) handleToolsList(request *ToolsListRequest) (*ToolsListResponse,
 }
 
 func (s *Server) handleToolsCall(request *ToolCallRequest) (*ToolCallResponse, error) {
-	method, path, operation, pathItem, found := s.findOperation(s.model, request.Name)
+	method, p, operation, pathItem, found := s.findOperation(s.model, request.Name)
 	if !found {
 		return nil, jsonrpc.NewError(jsonrpc.ErrMethodNotFound, nil)
 	}
@@ -357,13 +358,32 @@ func (s *Server) handleToolsCall(request *ToolCallRequest) (*ToolCallResponse, e
 		return nil, jsonrpc.NewError(jsonrpc.ErrInternal, err)
 	}
 
-	u := url.URL{
-		Scheme: baseURL.Scheme,
-		Host:   baseURL.Host,
-		Path:   path,
+	// Ensure the path starts with a slash
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
 	}
 
-	if baseURL.Scheme == "" {
+	// Clean the path to handle multiple slashes
+	p = path.Clean(p)
+
+	// Create a new URL with the base URL's scheme and host
+	u := &url.URL{
+		Scheme: baseURL.Scheme,
+		Host:   baseURL.Host,
+	}
+
+	// If the base URL has a path, join it with the operation path
+	if baseURL.Path != "" {
+		// Clean the base path
+		basePath := path.Clean(baseURL.Path)
+		// Join paths and ensure leading slash
+		u.Path = "/" + strings.TrimPrefix(path.Join(basePath, p), "/")
+	} else {
+		u.Path = p
+	}
+
+	// Set default scheme if not present
+	if u.Scheme == "" {
 		u.Scheme = "http"
 	}
 
