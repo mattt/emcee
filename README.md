@@ -233,7 +233,7 @@ by sending JSON-RPC requests.
 <summary>Request</summary>
 
 ```json
-{"jsonrpc": "2.0", "method": "tools/call", "params": { "name": "gridpoint_forecast", "arguments": { "stationId": "KPDX" }}, "id": 1}
+{"jsonrpc": "2.0", "method": "tools/call", "params": { "name": "taf", "arguments": { "stationId": "KPDX" }}, "id": 1}
 ```
 
 </details>
