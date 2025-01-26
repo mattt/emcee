@@ -23,13 +23,16 @@ var rootCmd = &cobra.Command{
 	Use:   "emcee [spec-path-or-url]",
 	Short: "Creates an MCP server for an OpenAPI specification",
 	Long: `emcee is a CLI tool that provides an Model Context Protocol (MCP) stdio transport for a given OpenAPI specification.
-It takes an OpenAPI specification path or URL as input and processes JSON-RPC requests
-from stdin, making corresponding API calls and returning JSON-RPC responses to stdout.
+It takes an OpenAPI specification path or URL as input and processes JSON-RPC requests from stdin, making corresponding API calls and returning JSON-RPC responses to stdout.
 
 The spec-path-or-url argument can be:
 - A local file path (e.g. ./openapi.json)
 - An HTTP(S) URL (e.g. https://api.example.com/openapi.json)
-- "-" to read from stdin`,
+- "-" to read from stdin
+
+By default, a GET request with no additional headers is made to the spec URL to download the OpenAPI specification.
+If additional authentication is required to download the specification, you can first download it to a local file using your preferred HTTP client with the necessary authentication headers, and then provide the local file path to emcee.
+`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Set up context and signal handling
