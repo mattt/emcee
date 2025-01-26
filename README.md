@@ -11,25 +11,49 @@ similar to [ChatGPT plugins][chatgpt-plugins].
 ## Quickstart
 
 If you're on macOS 15 and have [Homebrew][homebrew] installed,
-you can get up-and-running with a few commands:
+you can get up-and-running quickly. 
 
 ```bash
 # Install emcee
 brew install loopwork-ai/tap/emcee
 
-# Install claude and jq
-brew install --cask claude
-brew install jq # used to update Claude config in next step
-
-# Add MCP server for weather.gov to Claude Desktop
-CLAUDE_CONFIG="~/Library/Application Support/Claude/claude_desktop_config.json" && \
-mkdir -p "$(dirname "$CLAUDE_CONFIG")" && \
-touch "$CLAUDE_CONFIG" && \
-cp "$CLAUDE_CONFIG" <(jq '. * {"mcpServers":{"weather.gov":{"command":"emcee","args":["https://api.weather.gov/openapi.json"]}}}' "$CLAUDE_CONFIG")
-
-# Quit and Re-open Claude app
-osascript -e 'tell application "Claude" to quit' && sleep 1 && open -a Claude
 ```
+
+Make sure you have [Claude Desktop](https://claude.ai/download) installed.
+
+To configure Claude Desktop for use with emcee:
+
+1. Open Claude Desktop Settings (<kbd>⌘</kbd><kbd>,</kbd>)
+2. Select the "Developer" section in the sidebar
+3. Click "Edit Config" to open the configuration file
+
+![Claude Desktop settings Edit Config button](https://github.com/user-attachments/assets/761c6de5-62c2-4c53-83e6-54362040acd5)
+
+The configuration file should be located in the Application Support directory.
+You can also open it directly in VSCode using:
+
+```console
+code ~/Library/Application\ Support/Claude/claude_desktop_config.json
+```
+
+Add the following configuration to add the weather.gov MCP server:
+
+```json
+{
+  "mcpServers": {
+    "weather": {
+      "command": "emcee",
+      "args": [
+        "https://api.weather.gov/openapi.json"
+      ]
+    }
+  }
+}
+```
+
+After saving the file, quit and re-open Claude.
+You should now see <kbd>🔨57</kbd> in the bottom right corner of your chat box.
+Click on that to see a list of all the tools made available to Claude through MCP.
 
 Start a new chat and ask it about the weather where you are.
 
@@ -111,43 +135,7 @@ go build -o emcee cmd/emcee/main.go
 
 Once built, you can run in place (`./emcee`) or move it somewhere in your `PATH`, like `/usr/local/bin`.
 
-## Setup
 
-To configure Claude Desktop for use with emcee:
-
-1. Open Claude Desktop Settings (<kbd>⌘</kbd><kbd>,</kbd>)
-2. Select the "Developer" section in the sidebar
-3. Click "Edit Config" to open the configuration file
-
-![Claude Desktop settings Edit Config button](https://github.com/user-attachments/assets/761c6de5-62c2-4c53-83e6-54362040acd5)
-
-The configuration file should be located in the Application Support directory.
-You can open it directly in VSCode using:
-
-```console
-code ~/Library/Application\ Support/Claude/claude_desktop_config.json
-```
-
-Add the following configuration to add the weather.gov MCP server:
-
-```json
-{
-  "mcpServers": {
-    "weather": {
-      "command": "emcee",
-      "args": [
-        "https://api.weather.gov/openapi.json"
-      ]
-    }
-  }
-}
-```
-
-After saving the file, quit and re-open Claude.
-You should now see <kbd>🔨57</kbd> in the bottom right corner of your chat box.
-Click on that to see a list of all the tools made available to Claude through MCP.
-
-![Claude Desktop chat box with MCP tool count](https://github.com/user-attachments/assets/fc204032-2c52-4e74-85dc-c9d7687ff25f)
 
 ## Usage
 
