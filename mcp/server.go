@@ -15,16 +15,49 @@ import (
 	"github.com/pb33f/libopenapi"
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 
+	"github.com/loopwork-ai/emcee/internal"
 	"github.com/loopwork-ai/emcee/jsonrpc"
 )
 
+// Server represents an MCP server that processes JSON-RPC requests
+type Server struct {
+	auth    string
+	doc     libopenapi.Document
+	model   *v3.Document
+	baseURL string
+	client  *http.Client
+	info    ServerInfo
+	logger  *slog.Logger
+}
+
 // ServerOption configures a Server
 type ServerOption func(*Server) error
+
+// WithAuth sets the authentication header for the server
+func WithAuth(auth string) ServerOption {
+	return func(s *Server) error {
+		auth = strings.TrimSpace(auth)
+		parts := strings.SplitN(auth, " ", 2)
+		if len(parts) != 2 {
+			return fmt.Errorf("invalid auth header format: %s", auth)
+		}
+		s.auth = fmt.Sprintf("%s %s", parts[0], parts[1])
+		return nil
+	}
+}
 
 // WithClient sets the HTTP client
 func WithClient(client *http.Client) ServerOption {
 	return func(s *Server) error {
 		s.client = client
+		return nil
+	}
+}
+
+// WithLogger sets the logger for the server
+func WithLogger(logger *slog.Logger) ServerOption {
+	return func(s *Server) error {
+		s.logger = logger
 		return nil
 	}
 }
@@ -70,24 +103,6 @@ func WithSpecData(data []byte) ServerOption {
 	}
 }
 
-// WithLogger sets the logger for the server
-func WithLogger(logger *slog.Logger) ServerOption {
-	return func(s *Server) error {
-		s.logger = logger
-		return nil
-	}
-}
-
-// Server represents an MCP server that processes JSON-RPC requests
-type Server struct {
-	doc     libopenapi.Document
-	model   *v3.Document
-	baseURL string
-	client  *http.Client
-	info    ServerInfo
-	logger  *slog.Logger
-}
-
 // NewServer creates a new MCP server instance
 func NewServer(opts ...ServerOption) (*Server, error) {
 	s := &Server{
@@ -100,6 +115,17 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	for _, opt := range opts {
 		if err := opt(s); err != nil {
 			return nil, err
+		}
+	}
+
+	// Apply custom transport to inject auth header, if provided
+	if s.auth != "" {
+		headers := http.Header{}
+		headers.Add("Authorization", s.auth)
+
+		s.client.Transport = &internal.HeaderTransport{
+			Base:    s.client.Transport,
+			Headers: headers,
 		}
 	}
 

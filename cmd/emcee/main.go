@@ -12,9 +12,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/hashicorp/go-retryablehttp"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
+
+	"encoding/base64"
 
 	"github.com/loopwork-ai/emcee/internal"
 	"github.com/loopwork-ai/emcee/mcp"
@@ -24,13 +25,16 @@ var rootCmd = &cobra.Command{
 	Use:   "emcee [spec-path-or-url]",
 	Short: "Creates an MCP server for an OpenAPI specification",
 	Long: `emcee is a CLI tool that provides an Model Context Protocol (MCP) stdio transport for a given OpenAPI specification.
-It takes an OpenAPI specification path or URL as input and processes JSON-RPC requests
-from stdin, making corresponding API calls and returning JSON-RPC responses to stdout.
+It takes an OpenAPI specification path or URL as input and processes JSON-RPC requests from stdin, making corresponding API calls and returning JSON-RPC responses to stdout.
 
 The spec-path-or-url argument can be:
-- A local file path
-- An HTTP(S) URL
-- "-" to read from stdin`,
+- A local file path (e.g. ./openapi.json)
+- An HTTP(S) URL (e.g. https://api.example.com/openapi.json)
+- "-" to read from stdin
+
+By default, a GET request with no additional headers is made to the spec URL to download the OpenAPI specification.
+If additional authentication is required to download the specification, you can first download it to a local file using your preferred HTTP client with the necessary authentication headers, and then provide the local file path to emcee.
+`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Set up context and signal handling
@@ -57,53 +61,32 @@ The spec-path-or-url argument can be:
 			// Set logger
 			opts = append(opts, mcp.WithLogger(logger))
 
-			// Configure HTTP client
-			retryClient := retryablehttp.NewClient()
-			retryClient.RetryMax = retries
-			retryClient.RetryWaitMin = 1 * time.Second
-			retryClient.RetryWaitMax = 30 * time.Second
-			retryClient.HTTPClient.Timeout = timeout
-			retryClient.Logger = logger
-			if rps > 0 {
-				retryClient.Backoff = func(min, max time.Duration, attemptNum int, resp *http.Response) time.Duration {
-					// Ensure we wait at least 1/rps between requests
-					minWait := time.Second / time.Duration(rps)
-					if min < minWait {
-						min = minWait
-					}
-					return retryablehttp.DefaultBackoff(min, max, attemptNum, resp)
-				}
-			}
-
 			// Set default headers if auth is provided
-			if auth != "" {
-				parts := strings.SplitN(auth, " ", 2)
-				if len(parts) == 1 {
-					// Only token provided, add Bearer prefix
-					logger.Warn("no auth scheme provided, automatically adding 'Bearer' prefix")
-					auth = "Bearer " + parts[0]
-				} else if len(parts) == 2 {
-					// Scheme and token provided, use as-is
-					auth = fmt.Sprintf("%s %s", parts[0], parts[1])
+			if bearerAuth != "" {
+				opts = append(opts, mcp.WithAuth("Bearer "+bearerAuth))
+			} else if basicAuth != "" {
+				// Check if already base64 encoded
+				if strings.Contains(basicAuth, ":") {
+					encoded := base64.StdEncoding.EncodeToString([]byte(basicAuth))
+					opts = append(opts, mcp.WithAuth("Basic "+encoded))
+				} else {
+					// Assume it's already base64 encoded
+					opts = append(opts, mcp.WithAuth("Basic "+basicAuth))
 				}
-
-				headers := http.Header{}
-				headers.Add("Authorization", auth)
-
-				retryClient.HTTPClient.Transport = &internal.HeaderTransport{
-					Base:    retryClient.HTTPClient.Transport,
-					Headers: headers,
-				}
+			} else if rawAuth != "" {
+				opts = append(opts, mcp.WithAuth(rawAuth))
 			}
 
-			client := retryClient.StandardClient()
+			// Set HTTP client
+			client, err := internal.RetryableClient(retries, timeout, rps, logger)
+			if err != nil {
+				return fmt.Errorf("error creating client: %w", err)
+			}
 			opts = append(opts, mcp.WithClient(client))
 
 			// Read OpenAPI specification data
 			var rpcInput io.Reader = os.Stdin
 			var specData []byte
-			var err error
-
 			if args[0] == "-" {
 				logger.Info("reading spec from stdin")
 
@@ -128,11 +111,6 @@ The spec-path-or-url argument can be:
 				req, err := http.NewRequest(http.MethodGet, args[0], nil)
 				if err != nil {
 					return fmt.Errorf("error creating request: %w", err)
-				}
-
-				// Apply auth header if provided
-				if auth != "" {
-					req.Header.Set("Authorization", auth)
 				}
 
 				// Make HTTP request
@@ -201,11 +179,15 @@ The spec-path-or-url argument can be:
 }
 
 var (
-	auth    string
-	verbose bool
+	bearerAuth string
+	basicAuth  string
+	rawAuth    string
+
 	retries int
 	timeout time.Duration
 	rps     int
+
+	verbose bool
 
 	version = "dev"
 	commit  = "none"
@@ -213,11 +195,16 @@ var (
 )
 
 func init() {
-	rootCmd.Flags().StringVar(&auth, "auth", "", "Authorization header value (e.g. 'Bearer token123' or 'Basic dXNlcjpwYXNz')")
-	rootCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose logging to stderr")
+	rootCmd.Flags().StringVar(&bearerAuth, "bearer-auth", "", "Bearer token value (will be prefixed with 'Bearer ')")
+	rootCmd.Flags().StringVar(&basicAuth, "basic-auth", "", "Basic auth value (either user:pass or base64 encoded, will be prefixed with 'Basic ')")
+	rootCmd.Flags().StringVar(&rawAuth, "raw-auth", "", "Raw value for Authorization header")
+	rootCmd.MarkFlagsMutuallyExclusive("bearer-auth", "basic-auth", "raw-auth")
+
 	rootCmd.Flags().IntVar(&retries, "retries", 3, "Maximum number of retries for failed requests")
 	rootCmd.Flags().DurationVar(&timeout, "timeout", 60*time.Second, "HTTP request timeout")
 	rootCmd.Flags().IntVarP(&rps, "rps", "r", 0, "Maximum requests per second (0 for no limit)")
+
+	rootCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose logging to stderr")
 
 	rootCmd.Version = fmt.Sprintf("%s (commit: %s, built at: %s)", version, commit, date)
 }

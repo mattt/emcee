@@ -685,3 +685,76 @@ func TestWithSpecData(t *testing.T) {
 		})
 	}
 }
+
+func TestWithAuth(t *testing.T) {
+	tests := []struct {
+		name    string
+		auth    string
+		wantErr bool
+		assert  func(*testing.T, *Server)
+	}{
+		{
+			name: "valid bearer token",
+			auth: "Bearer mytoken123",
+			assert: func(t *testing.T, s *Server) {
+				assert.Equal(t, "Bearer mytoken123", s.auth)
+			},
+		},
+		{
+			name: "valid basic auth",
+			auth: "Basic dXNlcjpwYXNz",
+			assert: func(t *testing.T, s *Server) {
+				assert.Equal(t, "Basic dXNlcjpwYXNz", s.auth)
+			},
+		},
+		{
+			name:    "missing auth type",
+			auth:    "mytoken123",
+			wantErr: true,
+		},
+		{
+			name:    "empty auth",
+			auth:    "",
+			wantErr: true,
+		},
+		{
+			name:    "whitespace only",
+			auth:    "   ",
+			wantErr: true,
+		},
+	}
+
+	// Create a minimal valid spec for server initialization
+	validSpec := `{
+		"openapi": "3.0.0",
+		"servers": [{"url": "https://api.example.com"}],
+		"paths": {}
+	}`
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server, err := NewServer(
+				WithSpecData([]byte(validSpec)),
+				WithAuth(tt.auth),
+			)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Nil(t, server)
+				return
+			}
+
+			assert.NoError(t, err)
+			assert.NotNil(t, server)
+
+			if tt.assert != nil {
+				tt.assert(t, server)
+			}
+
+			// Verify the auth header is properly set in the client transport
+			transport, ok := server.client.Transport.(*internal.HeaderTransport)
+			assert.True(t, ok)
+			assert.Equal(t, tt.auth, transport.Headers.Get("Authorization"))
+		})
+	}
+}
