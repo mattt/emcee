@@ -15,6 +15,8 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 
+	"encoding/base64"
+
 	"github.com/loopwork-ai/emcee/internal"
 	"github.com/loopwork-ai/emcee/mcp"
 )
@@ -60,8 +62,19 @@ If additional authentication is required to download the specification, you can 
 			opts = append(opts, mcp.WithLogger(logger))
 
 			// Set default headers if auth is provided
-			if auth != "" {
-				opts = append(opts, mcp.WithAuth(auth))
+			if bearerAuth != "" {
+				opts = append(opts, mcp.WithAuth("Bearer "+bearerAuth))
+			} else if basicAuth != "" {
+				// Check if already base64 encoded
+				if strings.Contains(basicAuth, ":") {
+					encoded := base64.StdEncoding.EncodeToString([]byte(basicAuth))
+					opts = append(opts, mcp.WithAuth("Basic "+encoded))
+				} else {
+					// Assume it's already base64 encoded
+					opts = append(opts, mcp.WithAuth("Basic "+basicAuth))
+				}
+			} else if rawAuth != "" {
+				opts = append(opts, mcp.WithAuth(rawAuth))
 			}
 
 			// Set HTTP client
@@ -166,11 +179,15 @@ If additional authentication is required to download the specification, you can 
 }
 
 var (
-	auth    string
-	verbose bool
+	bearerAuth string
+	basicAuth  string
+	rawAuth    string
+
 	retries int
 	timeout time.Duration
 	rps     int
+
+	verbose bool
 
 	version = "dev"
 	commit  = "none"
@@ -178,11 +195,16 @@ var (
 )
 
 func init() {
-	rootCmd.Flags().StringVar(&auth, "auth", "", "Authorization header value (e.g. 'Bearer token123' or 'Basic dXNlcjpwYXNz')")
-	rootCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose logging to stderr")
+	rootCmd.Flags().StringVar(&bearerAuth, "bearer-auth", "", "Bearer token value (will be prefixed with 'Bearer ')")
+	rootCmd.Flags().StringVar(&basicAuth, "basic-auth", "", "Basic auth value (either user:pass or base64 encoded, will be prefixed with 'Basic ')")
+	rootCmd.Flags().StringVar(&rawAuth, "raw-auth", "", "Raw value for Authorization header")
+	rootCmd.MarkFlagsMutuallyExclusive("bearer-auth", "basic-auth", "raw-auth")
+
 	rootCmd.Flags().IntVar(&retries, "retries", 3, "Maximum number of retries for failed requests")
 	rootCmd.Flags().DurationVar(&timeout, "timeout", 60*time.Second, "HTTP request timeout")
 	rootCmd.Flags().IntVarP(&rps, "rps", "r", 0, "Maximum requests per second (0 for no limit)")
+
+	rootCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose logging to stderr")
 
 	rootCmd.Version = fmt.Sprintf("%s (commit: %s, built at: %s)", version, commit, date)
 }
