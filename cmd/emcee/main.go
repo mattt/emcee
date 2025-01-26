@@ -12,10 +12,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/hashicorp/go-retryablehttp"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/loopwork-ai/emcee/internal"
 	"github.com/loopwork-ai/emcee/mcp"
 )
 
@@ -27,8 +27,8 @@ It takes an OpenAPI specification path or URL as input and processes JSON-RPC re
 from stdin, making corresponding API calls and returning JSON-RPC responses to stdout.
 
 The spec-path-or-url argument can be:
-- A local file path
-- An HTTP(S) URL
+- A local file path (e.g. ./openapi.json)
+- An HTTP(S) URL (e.g. https://api.example.com/openapi.json)
 - "-" to read from stdin`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -56,37 +56,21 @@ The spec-path-or-url argument can be:
 			// Set logger
 			opts = append(opts, mcp.WithLogger(logger))
 
-			// Configure HTTP client
-			retryClient := retryablehttp.NewClient()
-			retryClient.RetryMax = retries
-			retryClient.RetryWaitMin = 1 * time.Second
-			retryClient.RetryWaitMax = 30 * time.Second
-			retryClient.HTTPClient.Timeout = timeout
-			retryClient.Logger = logger
-			if rps > 0 {
-				retryClient.Backoff = func(min, max time.Duration, attemptNum int, resp *http.Response) time.Duration {
-					// Ensure we wait at least 1/rps between requests
-					minWait := time.Second / time.Duration(rps)
-					if min < minWait {
-						min = minWait
-					}
-					return retryablehttp.DefaultBackoff(min, max, attemptNum, resp)
-				}
-			}
-
 			// Set default headers if auth is provided
 			if auth != "" {
 				opts = append(opts, mcp.WithAuth(auth))
 			}
 
-			client := retryClient.StandardClient()
+			// Set HTTP client
+			client, err := internal.RetryableClient(retries, timeout, rps, logger)
+			if err != nil {
+				return fmt.Errorf("error creating client: %w", err)
+			}
 			opts = append(opts, mcp.WithClient(client))
 
 			// Read OpenAPI specification data
 			var rpcInput io.Reader = os.Stdin
 			var specData []byte
-			var err error
-
 			if args[0] == "-" {
 				logger.Info("reading spec from stdin")
 
