@@ -10,13 +10,12 @@ similar to [ChatGPT plugins][chatgpt-plugins].
 
 ## Quickstart
 
-If you're on macOS 15 and have [Homebrew][homebrew] installed,
-you can get up-and-running quickly. 
+If you're on macOS and have [Homebrew][homebrew] installed,
+you can get up-and-running quickly.
 
 ```bash
 # Install emcee
 brew install loopwork-ai/tap/emcee
-
 ```
 
 Make sure you have [Claude Desktop](https://claude.ai/download) installed.
@@ -73,8 +72,8 @@ and use the result to inform its response.
 ---
 
 > [!TIP]
-> Building agents? Want to deploy remote MCP servers?  
-> Reach out to us at emcee@loopwork.com  
+> Building agents? Want to deploy remote MCP servers?
+> Reach out to us at emcee@loopwork.com
 
 ---
 
@@ -90,7 +89,6 @@ _especially for services you're building yourself_.
 Got a web app with an OpenAPI spec?
 You might be surprised how far you can get
 without a dashboard or client library.
-
 
 ## Installation
 
@@ -133,20 +131,12 @@ cd emcee
 go build -o emcee cmd/emcee/main.go
 ```
 
-Once built, you can run in place (`./emcee`) or move it somewhere in your `PATH`, like `/usr/local/bin`.
-
-
+Once built, you can run in place (`./emcee`)
+or move it somewhere in your `PATH`, like `/usr/local/bin`.
 
 ## Usage
 
 ```console
-- A local file path (e.g. ./openapi.json)
-- An HTTP(S) URL (e.g. https://api.example.com/openapi.json)
-- "-" to read from stdin
-
-By default, a GET request with no additional headers is made to the spec URL to download the OpenAPI specification.
-If additional authentication is required to download the specification, you can first download it to a local file using your preferred HTTP client with the necessary authentication headers, and then provide the local file path to emcee.
-
 Usage:
   emcee [spec-path-or-url] [flags]
 
@@ -157,8 +147,9 @@ Flags:
       --raw-auth string      Raw value for Authorization header
       --retries int          Maximum number of retries for failed requests (default 3)
   -r, --rps int              Maximum requests per second (0 for no limit)
+  -s, --silent               Disable all logging
       --timeout duration     HTTP request timeout (default 1m0s)
-  -v, --verbose              Enable verbose logging to stderr
+  -v, --verbose              Enable debug level logging to stderr
       --version              version for emcee
 ```
 
