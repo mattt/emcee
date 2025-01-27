@@ -162,14 +162,50 @@ it starts a program that listens on stdin,
 outputs to stdout,
 and logs to stderr.
 
+### Authentication
+
+For APIs that require authentication,
+emcee supports several authentication methods:
+
+| Authentication Type | Example Usage | Resulting Header |
+|------------------------|---------------|----------------------------|
+| **Bearer Token** | `--bearer-auth="abc123"` | `Authorization: Bearer abc123` |
+| **Basic Auth** | `--basic-auth="user:pass"` | `Authorization: Basic dXNlcjpwYXNz` |
+| **Raw Value** | `--raw-auth="Custom xyz789"` | `Authorization: Custom xyz789` |
+
+These authentication values can be provided directly
+or as [1Password secret references][secret-reference-syntax].
+
+When using 1Password references:
+- Use the format `op://vault/item/field`
+  (e.g. `--bearer-auth="op://Shared/X/credential"`)
+- Ensure the 1Password CLI (`op`) is installed and available in your `PATH`
+- Sign in to 1Password before running `emcee` or launching Claude Desktop
+
+```json
+{
+  "mcpServers": {
+    "twitter": {
+      "command": "emcee",
+      "args": [
+        "--bearer-auth=op://shared/x/credential",
+        "https://api.twitter.com/2/openapi.json"
+      ]
+    }
+  }
+}
+```
+
+<img src="https://github.com/user-attachments/assets/d639fd7c-f3bf-477c-9eb7-229285b36f7d" alt="1Password Access Requested" width="512">
+
+### JSON-RPC
+
 You can interact directly with the provided MCP server
 by sending JSON-RPC requests.
 
 > [!NOTE]
 > emcee provides only MCP tool capabilities.
 > Other features like resources, prompts, and sampling aren't yet supported.
-
-### Example JSON-RPC Calls
 
 #### List Tools
 
@@ -281,3 +317,4 @@ emcee is licensed under the Apache License, Version 2.0.
 [mcp-servers]: https://modelcontextprotocol.io/examples
 [openapi]: https://openapi.org
 [releases]: https://github.com/loopwork-ai/emcee/releases
+[secret-reference-syntax]: https://developer.1password.com/docs/cli/secret-reference-syntax/
