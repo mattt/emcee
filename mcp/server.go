@@ -149,6 +149,7 @@ func (s *Server) HandleRequest(request jsonrpc.Request) jsonrpc.Response {
 		s.logger.Debug("incoming request",
 			"request", string(reqJSON),
 			"method", request.Method)
+		s.logger.Info("handling request", "method", request.Method)
 	}
 
 	var response jsonrpc.Response
@@ -169,6 +170,11 @@ func (s *Server) HandleRequest(request jsonrpc.Request) jsonrpc.Response {
 	}
 
 	if s.logger != nil {
+		if response.Error != nil {
+			s.logger.Error("request failed",
+				"method", request.Method,
+				"error", response.Error)
+		}
 		respJSON, _ := json.MarshalIndent(response, "", "  ")
 		s.logger.Debug("outgoing response",
 			"response", string(respJSON))
@@ -223,9 +229,13 @@ func (s *Server) handleInitialize(request *InitializeRequest) (*InitializeRespon
 func (s *Server) handleToolsList(request *ToolsListRequest) (*ToolsListResponse, error) {
 	tools := []Tool{}
 	if s.model.Paths == nil || s.model.Paths.PathItems == nil {
+		if s.logger != nil {
+			s.logger.Info("no tools found in OpenAPI spec")
+		}
 		return &ToolsListResponse{Tools: tools}, nil
 	}
 
+	toolCount := 0
 	// Iterate through paths and operations
 	for pair := s.model.Paths.PathItems.First(); pair != nil; pair = pair.Next() {
 		pathItem := pair.Value()
@@ -246,6 +256,13 @@ func (s *Server) handleToolsList(request *ToolsListRequest) (*ToolsListResponse,
 			if op.op == nil || op.op.OperationId == "" {
 				continue
 			}
+			if s.logger != nil {
+				s.logger.Debug("discovered tool",
+					"operation_id", op.op.OperationId,
+					"method", op.method,
+					"description", op.op.Description)
+			}
+			toolCount++
 
 			// Create input schema
 			inputSchema := InputSchema{
@@ -341,6 +358,10 @@ func (s *Server) handleToolsList(request *ToolsListRequest) (*ToolsListResponse,
 				InputSchema: inputSchema,
 			})
 		}
+	}
+
+	if s.logger != nil {
+		s.logger.Info("tools discovery completed", "count", toolCount)
 	}
 
 	return &ToolsListResponse{Tools: tools}, nil
