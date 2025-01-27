@@ -198,6 +198,27 @@ When using 1Password references:
 
 <img src="https://github.com/user-attachments/assets/d639fd7c-f3bf-477c-9eb7-229285b36f7d" alt="1Password Access Requested" width="512">
 
+
+### Transforming OpenAPI Specifications
+
+You can transform OpenAPI specifications before passing them to emcee using standard Unix utilities. This is useful for:
+- Selecting specific endpoints to expose as tools
+  with [`jq`][jq] or [`yq`][yq]
+- Modifying descriptions or parameters 
+  with [OpenAPI Overlays][openapi-overlays]
+- Combining multiple specifications
+  with [Redocly][redocly-cli]
+
+For example,
+you can use `jq` to include only the `point` tool from `weather.gov`.
+
+```console
+cat path/to/openapi.json | \
+  jq 'if .paths then .paths |= with_entries(select(.key == "/points/{point}")) else . end' | \
+  emcee
+```
+
+
 ### JSON-RPC
 
 You can interact directly with the provided MCP server
@@ -311,10 +332,14 @@ emcee is licensed under the Apache License, Version 2.0.
 [homebrew]: https://brew.sh
 [homebrew-tap]: https://github.com/loopwork-ai/homebrew-tap
 [installer]: https://github.com/loopwork-ai/emcee/blob/main/tools/install.sh
+[jq]: https://github.com/jqlang/jq
 [mcp]: https://modelcontextprotocol.io/
 [mcp-clients]: https://modelcontextprotocol.info/docs/clients/
 [mcp-inspector]: https://github.com/modelcontextprotocol/inspector
 [mcp-servers]: https://modelcontextprotocol.io/examples
 [openapi]: https://openapi.org
+[openapi-overlays]: https://www.openapis.org/blog/2024/10/22/announcing-overlay-specification
+[redocly-cli]: https://redocly.com/docs/cli/commands
 [releases]: https://github.com/loopwork-ai/emcee/releases
 [secret-reference-syntax]: https://developer.1password.com/docs/cli/secret-reference-syntax/
+[yq]: https://github.com/mikefarah/yq
