@@ -146,7 +146,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 func (s *Server) HandleRequest(request jsonrpc.Request) jsonrpc.Response {
 	if s.logger != nil {
 		reqJSON, _ := json.MarshalIndent(request, "", "  ")
-		s.logger.Info("incoming request",
+		s.logger.Debug("incoming request",
 			"request", string(reqJSON),
 			"method", request.Method)
 	}
@@ -170,7 +170,7 @@ func (s *Server) HandleRequest(request jsonrpc.Request) jsonrpc.Response {
 
 	if s.logger != nil {
 		respJSON, _ := json.MarshalIndent(response, "", "  ")
-		s.logger.Info("outgoing response",
+		s.logger.Debug("outgoing response",
 			"response", string(respJSON))
 	}
 
