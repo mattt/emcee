@@ -8,6 +8,13 @@ import (
 	"strings"
 )
 
+var (
+	// Command is a variable that allows overriding the command creation for testing
+	CommandContext = exec.CommandContext
+	// LookPath is a variable that allows overriding the lookup behavior for testing
+	LookPath = exec.LookPath
+)
+
 // ResolveSecretReference attempts to resolve a 1Password secret reference (e.g. op://vault/item/field)
 // Returns the resolved value and whether it was a secret reference
 func ResolveSecretReference(ctx context.Context, value string) (string, bool, error) {
@@ -16,12 +23,12 @@ func ResolveSecretReference(ctx context.Context, value string) (string, bool, er
 	}
 
 	// Check if op CLI is available
-	if _, err := exec.LookPath("op"); err != nil {
+	if _, err := LookPath("op"); err != nil {
 		return "", true, fmt.Errorf("1Password CLI (op) not found in PATH: %w", err)
 	}
 
 	// Create command to read secret
-	cmd := exec.CommandContext(ctx, "op", "read", value)
+	cmd := CommandContext(ctx, "op", "read", value)
 	output, err := cmd.Output()
 	if err != nil {
 		var exitErr *exec.ExitError
