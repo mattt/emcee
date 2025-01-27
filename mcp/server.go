@@ -444,7 +444,18 @@ func (s *Server) handleToolsCall(request *ToolCallRequest) (*ToolCallResponse, e
 						value := fmt.Sprint(value)
 						u.Path = strings.ReplaceAll(u.Path, "{"+param.Name+"}", pathSegmentEscape(value))
 					case "query":
-						queryParams.Set(param.Name, fmt.Sprint(value))
+						// Handle array values for query parameters
+						switch v := value.(type) {
+						case []interface{}:
+							// Join array values with commas for parameters like tweet.fields
+							values := make([]string, len(v))
+							for i, item := range v {
+								values[i] = fmt.Sprint(item)
+							}
+							queryParams.Set(param.Name, strings.Join(values, ","))
+						default:
+							queryParams.Set(param.Name, fmt.Sprint(value))
+						}
 					case "header":
 						headerParams.Add(param.Name, fmt.Sprint(value))
 					}
