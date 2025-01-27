@@ -182,6 +182,14 @@ When using 1Password references:
 - Ensure the 1Password CLI ([op][op]) is installed and available in your `PATH`
 - Sign in to 1Password before running emcee or launching Claude Desktop
 
+```console
+# Install op
+brew install 1password-cli
+
+# Sign in 1Password CLI
+op signin
+```
+
 ```json
 {
   "mcpServers": {
