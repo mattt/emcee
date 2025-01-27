@@ -179,8 +179,16 @@ or as [1Password secret references][secret-reference-syntax].
 When using 1Password references:
 - Use the format `op://vault/item/field`
   (e.g. `--bearer-auth="op://Shared/X/credential"`)
-- Ensure the 1Password CLI (`op`) is installed and available in your `PATH`
-- Sign in to 1Password before running `emcee` or launching Claude Desktop
+- Ensure the 1Password CLI ([op][op]) is installed and available in your `PATH`
+- Sign in to 1Password before running emcee or launching Claude Desktop
+
+```console
+# Install op
+brew install 1password-cli
+
+# Sign in 1Password CLI
+op signin
+```
 
 ```json
 {
@@ -343,6 +351,7 @@ emcee is licensed under the Apache License, Version 2.0.
 [mcp-clients]: https://modelcontextprotocol.info/docs/clients/
 [mcp-inspector]: https://github.com/modelcontextprotocol/inspector
 [mcp-servers]: https://modelcontextprotocol.io/examples
+[op]: https://developer.1password.com/docs/cli/get-started/
 [openapi]: https://openapi.org
 [openapi-overlays]: https://www.openapis.org/blog/2024/10/22/announcing-overlay-specification
 [redocly-cli]: https://redocly.com/docs/cli/commands
