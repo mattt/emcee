@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
 	"io"
 	"log/slog"
@@ -14,8 +15,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
-
-	"encoding/base64"
 
 	"github.com/loopwork-ai/emcee/internal"
 	"github.com/loopwork-ai/emcee/mcp"
@@ -33,7 +32,14 @@ The spec-path-or-url argument can be:
 - "-" to read from stdin
 
 By default, a GET request with no additional headers is made to the spec URL to download the OpenAPI specification.
+
 If additional authentication is required to download the specification, you can first download it to a local file using your preferred HTTP client with the necessary authentication headers, and then provide the local file path to emcee.
+
+Authentication values can be provided directly or as 1Password secret references (e.g. op://vault/item/field). When using 1Password references:
+- The 1Password CLI (op) must be installed and available in your PATH
+- You must be signed in to 1Password
+- The reference must be in the format op://vault/item/field
+- The secret will be securely retrieved at runtime using the 1Password CLI
 `,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -70,18 +76,39 @@ If additional authentication is required to download the specification, you can 
 
 			// Set default headers if auth is provided
 			if bearerAuth != "" {
-				opts = append(opts, mcp.WithAuth("Bearer "+bearerAuth))
+				resolvedAuth, wasSecret, err := internal.ResolveSecretReference(ctx, bearerAuth)
+				if err != nil {
+					return fmt.Errorf("error resolving bearer auth: %w", err)
+				}
+				if wasSecret {
+					logger.Debug("resolved bearer auth from 1Password")
+				}
+				opts = append(opts, mcp.WithAuth("Bearer "+resolvedAuth))
 			} else if basicAuth != "" {
+				resolvedAuth, wasSecret, err := internal.ResolveSecretReference(ctx, basicAuth)
+				if err != nil {
+					return fmt.Errorf("error resolving basic auth: %w", err)
+				}
+				if wasSecret {
+					logger.Debug("resolved basic auth from 1Password")
+				}
 				// Check if already base64 encoded
-				if strings.Contains(basicAuth, ":") {
-					encoded := base64.StdEncoding.EncodeToString([]byte(basicAuth))
+				if strings.Contains(resolvedAuth, ":") {
+					encoded := base64.StdEncoding.EncodeToString([]byte(resolvedAuth))
 					opts = append(opts, mcp.WithAuth("Basic "+encoded))
 				} else {
 					// Assume it's already base64 encoded
-					opts = append(opts, mcp.WithAuth("Basic "+basicAuth))
+					opts = append(opts, mcp.WithAuth("Basic "+resolvedAuth))
 				}
 			} else if rawAuth != "" {
-				opts = append(opts, mcp.WithAuth(rawAuth))
+				resolvedAuth, wasSecret, err := internal.ResolveSecretReference(ctx, rawAuth)
+				if err != nil {
+					return fmt.Errorf("error resolving raw auth: %w", err)
+				}
+				if wasSecret {
+					logger.Debug("resolved raw auth from 1Password")
+				}
+				opts = append(opts, mcp.WithAuth(resolvedAuth))
 			}
 
 			// Set HTTP client

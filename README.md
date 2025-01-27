@@ -161,14 +161,33 @@ it starts a program that listens on stdin,
 outputs to stdout,
 and logs to stderr.
 
+### Authentication
+
+For APIs that require authentication,
+emcee supports several authentication methods:
+
+- Bearer tokens (`--bearer-auth`)
+- Basic auth (`--basic-auth`)
+- Raw `Authorization` header values (`--raw-auth`)
+
+These authentication values can be provided directly
+or as [1Password secret references][secret-reference-syntax].
+
+When using 1Password references:
+- Use the format `op://vault/item/field`
+  (e.g. `--bearer-auth="op://Development/Weather API/token"`)
+- Ensure the 1Password CLI (`op`) is installed and available in your `PATH`
+- Sign in to 1Password before running `emcee`
+- The secret will be securely retrieved at runtime using the 1Password CLI
+
+### JSON-RPC
+
 You can interact directly with the provided MCP server
 by sending JSON-RPC requests.
 
 > [!NOTE]
 > emcee provides only MCP tool capabilities.
 > Other features like resources, prompts, and sampling aren't yet supported.
-
-### Example JSON-RPC Calls
 
 #### List Tools
 
@@ -280,3 +299,4 @@ emcee is licensed under the Apache License, Version 2.0.
 [mcp-servers]: https://modelcontextprotocol.io/examples
 [openapi]: https://openapi.org
 [releases]: https://github.com/loopwork-ai/emcee/releases
+[secret-reference-syntax]: https://developer.1password.com/docs/cli/secret-reference-syntax/
