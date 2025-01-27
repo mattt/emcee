@@ -203,7 +203,7 @@ When using 1Password references:
 
 You can transform OpenAPI specifications before passing them to emcee using standard Unix utilities. This is useful for:
 - Selecting specific endpoints to expose as tools
-  with [`jq`][jq] or [`yq`][yq]
+  with [jq][jq] or [yq][yq]
 - Modifying descriptions or parameters 
   with [OpenAPI Overlays][openapi-overlays]
 - Combining multiple specifications
