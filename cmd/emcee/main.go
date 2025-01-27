@@ -45,11 +45,18 @@ If additional authentication is required to download the specification, you can 
 		g, ctx := errgroup.WithContext(ctx)
 
 		// Set up logger
-		logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-			Level: slog.LevelDebug,
-		}))
-		if !verbose {
+		var logger *slog.Logger
+		switch {
+		case silent:
 			logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+		case verbose:
+			logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+				Level: slog.LevelDebug,
+			}))
+		default:
+			logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+				Level: slog.LevelInfo,
+			}))
 		}
 
 		g.Go(func() error {
@@ -188,6 +195,7 @@ var (
 	rps     int
 
 	verbose bool
+	silent  bool
 
 	version = "dev"
 	commit  = "none"
@@ -204,7 +212,9 @@ func init() {
 	rootCmd.Flags().DurationVar(&timeout, "timeout", 60*time.Second, "HTTP request timeout")
 	rootCmd.Flags().IntVarP(&rps, "rps", "r", 0, "Maximum requests per second (0 for no limit)")
 
-	rootCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose logging to stderr")
+	rootCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Enable debug level logging to stderr")
+	rootCmd.Flags().BoolVarP(&silent, "silent", "s", false, "Disable all logging")
+	rootCmd.MarkFlagsMutuallyExclusive("verbose", "silent")
 
 	rootCmd.Version = fmt.Sprintf("%s (commit: %s, built at: %s)", version, commit, date)
 }
