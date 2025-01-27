@@ -1,5 +1,5 @@
+~/
 /emcee
 dist/
 
-
-claude_desktop_config.local.json
+.DS_Store
