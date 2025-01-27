@@ -94,15 +94,16 @@ without a dashboard or client library.
 
 ### Installer Script
 
-Use the [installer script][installer] to download and install
-a [pre-built release][releases] of emcee for your platform (Linux x86-64/i386/arm64 and macOS Intel/Apple Silicon).
+Use the [installer script][installer] to download and install a 
+[pre-built release][releases] of emcee for your platform 
+(Linux x86-64/i386/arm64 and macOS Intel/Apple Silicon).
 
 ```console
 # fish
-sh (curl -fsSL https://raw.githubusercontent.com/loopwork-ai/emcee/refs/heads/main/tools/install.sh | psub)
+sh (curl -fsSL https://get.emcee.sh | psub)
 
 # bash, zsh
-sh <(curl -fsSL https://raw.githubusercontent.com/loopwork-ai/emcee/refs/heads/main/tools/install.sh)
+sh <(curl -fsSL https://get.emcee.sh)
 ```
 
 ### Homebrew
