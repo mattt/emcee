@@ -166,19 +166,36 @@ and logs to stderr.
 For APIs that require authentication,
 emcee supports several authentication methods:
 
-- Bearer tokens (`--bearer-auth`)
-- Basic auth (`--basic-auth`)
-- Raw `Authorization` header values (`--raw-auth`)
+| Authentication Type | Example Usage | Resulting Header |
+|------------------------|---------------|----------------------------|
+| **Bearer Token** | `--bearer-auth="abc123"` | `Authorization: Bearer abc123` |
+| **Basic Auth** | `--basic-auth="user:pass"` | `Authorization: Basic dXNlcjpwYXNz` |
+| **Raw Value** | `--raw-auth="Custom xyz789"` | `Authorization: Custom xyz789` |
 
 These authentication values can be provided directly
 or as [1Password secret references][secret-reference-syntax].
 
 When using 1Password references:
 - Use the format `op://vault/item/field`
-  (e.g. `--bearer-auth="op://Development/Weather API/token"`)
+  (e.g. `--bearer-auth="op://Shared/X/credential"`)
 - Ensure the 1Password CLI (`op`) is installed and available in your `PATH`
-- Sign in to 1Password before running `emcee`
-- The secret will be securely retrieved at runtime using the 1Password CLI
+- Sign in to 1Password before running `emcee` or launching Claude Desktop
+
+```json
+{
+  "mcpServers": {
+    "twitter": {
+      "command": "emcee",
+      "args": [
+        "--bearer-auth=op://shared/x/credential",
+        "https://api.twitter.com/2/openapi.json"
+      ]
+    }
+  }
+}
+```
+
+![1Password Access Requested](https://github.com/user-attachments/assets/d639fd7c-f3bf-477c-9eb7-229285b36f7d)
 
 ### JSON-RPC
 
