@@ -195,7 +195,7 @@ When using 1Password references:
 }
 ```
 
-![1Password Access Requested](https://github.com/user-attachments/assets/d639fd7c-f3bf-477c-9eb7-229285b36f7d)
+<img src="https://github.com/user-attachments/assets/d639fd7c-f3bf-477c-9eb7-229285b36f7d" alt="1Password Access Requested" width="512">
 
 ### JSON-RPC
 
