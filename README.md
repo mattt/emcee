@@ -198,6 +198,12 @@ When using 1Password references:
 
 <img src="https://github.com/user-attachments/assets/d639fd7c-f3bf-477c-9eb7-229285b36f7d" alt="1Password Access Requested" width="512">
 
+> [!IMPORTANT]  
+> emcee doesn't use auth credentials when downloading 
+> OpenAPI specifications from URLs provided as command arguments.
+> If your OpenAPI specification requires authentication to access,
+> first download it to a local file using your preferred HTTP client,
+> then provide the local file path to emcee.
 
 ### Transforming OpenAPI Specifications
 
