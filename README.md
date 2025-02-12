@@ -124,7 +124,7 @@ docker run -it ghcr.io/loopwork-ai/emcee
 
 ### Build From Source
 
-Requires [go 1.23][golang] or later.
+Requires [go 1.24][golang] or later.
 
 ```console
 git clone https://github.com/loopwork-ai/emcee.git
