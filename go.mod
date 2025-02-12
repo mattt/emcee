@@ -1,6 +1,6 @@
 module github.com/loopwork-ai/emcee
 
-go 1.23.3
+go 1.24.0
 
 require (
 	github.com/hashicorp/go-retryablehttp v0.7.7
