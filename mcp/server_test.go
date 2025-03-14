@@ -10,6 +10,9 @@ import (
 	"strings"
 	"testing"
 
+	"io"
+	"log/slog"
+
 	"github.com/loopwork-ai/emcee/internal"
 	"github.com/loopwork-ai/emcee/jsonrpc"
 	"github.com/stretchr/testify/assert"
@@ -929,4 +932,22 @@ func TestFindOperationByToolName(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestHandleInitializedNotification(t *testing.T) {
+	// Create a test server with a logger
+	server, ts := setupTestServer(t)
+	defer ts.Close()
+
+	// Add a logger to the server
+	server.logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	// Create an initialized notification
+	notification := jsonrpc.NewRequest("initialized", nil, 1)
+
+	// Handle the notification
+	response := server.HandleRequest(notification)
+
+	// Verify that notifications don't generate a response
+	assert.Nil(t, response, "notifications should not generate a response")
 }
