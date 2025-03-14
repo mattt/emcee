@@ -16,10 +16,10 @@ import (
 )
 
 type mockServer struct {
-	handleRequestFunc func(jsonrpc.Request) jsonrpc.Response
+	handleRequestFunc func(jsonrpc.Request) *jsonrpc.Response
 }
 
-func (m *mockServer) Handle(req jsonrpc.Request) jsonrpc.Response {
+func (m *mockServer) Handle(req jsonrpc.Request) *jsonrpc.Response {
 	return m.handleRequestFunc(req)
 }
 
@@ -70,8 +70,8 @@ func TestTransport_Run(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Setup mock server
 			mockServer := &mockServer{
-				handleRequestFunc: func(jsonrpc.Request) jsonrpc.Response {
-					return tt.mockResponse
+				handleRequestFunc: func(req jsonrpc.Request) *jsonrpc.Response {
+					return &tt.mockResponse
 				},
 			}
 
