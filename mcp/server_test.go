@@ -504,9 +504,9 @@ func TestHandleToolsCall(t *testing.T) {
 
 			var response jsonrpc.Response
 			if tt.server != nil {
-				response = tt.server.HandleRequest(tt.request)
+				response = *tt.server.HandleRequest(tt.request)
 			} else {
-				response = server.HandleRequest(tt.request)
+				response = *server.HandleRequest(tt.request)
 			}
 
 			tt.validate(t, response, capturedURL)

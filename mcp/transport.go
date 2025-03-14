@@ -53,10 +53,10 @@ func setupNonBlockingFd(f interface{}) (fd int, cleanup func() error, err error)
 }
 
 // Run starts the transport loop, reading from stdin and writing to stdout
-func (t *Transport) Run(ctx context.Context, handler func(jsonrpc.Request) jsonrpc.Response) error {
+func (t *Transport) Run(ctx context.Context, handler func(jsonrpc.Request) *jsonrpc.Response) error {
 	g, ctx := errgroup.WithContext(ctx)
 	lines := make(chan string)
-	responses := make(chan jsonrpc.Response)
+	responses := make(chan *jsonrpc.Response)
 
 	// Writer goroutine
 	g.Go(func() error {
@@ -197,16 +197,18 @@ func (t *Transport) Run(ctx context.Context, handler func(jsonrpc.Request) jsonr
 					select {
 					case <-ctx.Done():
 						return nil
-					case responses <- response:
+					case responses <- &response:
 					}
 					continue
 				}
 
 				response := handler(request)
-				select {
-				case <-ctx.Done():
-					return nil
-				case responses <- response:
+				if response != nil {
+					select {
+					case <-ctx.Done():
+						return nil
+					case responses <- response:
+					}
 				}
 			}
 		}

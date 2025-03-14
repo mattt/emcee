@@ -144,7 +144,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 }
 
 // HandleRequest processes a single JSON-RPC request and returns a response
-func (s *Server) HandleRequest(request jsonrpc.Request) jsonrpc.Response {
+func (s *Server) HandleRequest(request jsonrpc.Request) *jsonrpc.Response {
 	if s.logger != nil {
 		reqJSON, _ := json.MarshalIndent(request, "", "  ")
 		s.logger.Debug("incoming request",
@@ -153,16 +153,21 @@ func (s *Server) HandleRequest(request jsonrpc.Request) jsonrpc.Response {
 		s.logger.Info("handling request", "method", request.Method)
 	}
 
+	if strings.HasPrefix(request.Method, "notifications/") {
+		s.logger.Info("received notification", "method", request.Method)
+		return nil
+	}
+
 	var response jsonrpc.Response
 	switch request.Method {
 	case "initialize":
-		response = handleMethod(request, s.handleInitialize)
+		response = handleRequest(request, s.handleInitialize)
 	case "tools/list":
-		response = handleMethod(request, s.handleToolsList)
+		response = handleRequest(request, s.handleToolsList)
 	case "tools/call":
-		response = handleMethod(request, s.handleToolsCall)
+		response = handleRequest(request, s.handleToolsCall)
 	case "ping/ping":
-		response = handleMethod(request, s.handlePing)
+		response = handleRequest(request, s.handlePing)
 	default:
 		if s.logger != nil {
 			s.logger.Warn("unknown method requested", "method", request.Method)
@@ -181,11 +186,11 @@ func (s *Server) HandleRequest(request jsonrpc.Request) jsonrpc.Response {
 			"response", string(respJSON))
 	}
 
-	return response
+	return &response
 }
 
-// handleMethod is a helper to unmarshal params and call a handler with proper error handling
-func handleMethod[Req, Resp any](request jsonrpc.Request, handler func(*Req) (*Resp, error)) jsonrpc.Response {
+// handleRequest is a helper to unmarshal params and call a handler with proper error handling
+func handleRequest[Req, Resp any](request jsonrpc.Request, handler func(*Req) (*Resp, error)) jsonrpc.Response {
 	var req Req
 	if request.Params != nil {
 		if err := json.Unmarshal(request.Params, &req); err != nil {
@@ -210,6 +215,18 @@ func handleMethod[Req, Resp any](request jsonrpc.Request, handler func(*Req) (*R
 	}
 
 	return jsonrpc.NewResponse(request.ID, result, nil)
+}
+
+// handleNotification is a helper to unmarshal params and call a notification handler
+func handleNotification[Req any](request jsonrpc.Request, handler func(*Req)) {
+	var req Req
+	if request.Params != nil {
+		if err := json.Unmarshal(request.Params, &req); err != nil {
+			return
+		}
+	}
+
+	handler(&req)
 }
 
 func (s *Server) handleInitialize(request *InitializeRequest) (*InitializeResponse, error) {
