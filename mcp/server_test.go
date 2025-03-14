@@ -802,13 +802,13 @@ func TestToolNameMapping(t *testing.T) {
 			name:        "long operation ID",
 			operationId: "thisIsAVeryLongOperationIdThatExceedsTheSixtyFourCharacterLimitAndNeedsToBeHandledProperly",
 			wantLen:     64,
-			wantPrefix:  "thisIsAVeryLongOperationIdThatExceedsTheSixtyFourCharacterLimitAndNe",
+			wantPrefix:  "thisIsAVeryLongOperationIdThatExceedsTheSixtyFourCharac", // 55 chars
 		},
 		{
 			name:        "multiple long IDs generate different names",
 			operationId: "anotherVeryLongOperationIdThatExceedsTheSixtyFourCharacterLimitAndNeedsToBeHandledProperly",
 			wantLen:     64,
-			wantPrefix:  "anotherVeryLongOperationIdThatExceedsTheSixtyFourCharacterLimitAndN",
+			wantPrefix:  "anotherVeryLongOperationIdThatExceedsTheSixtyFourCharac", // 55 chars
 		},
 	}
 
@@ -823,26 +823,29 @@ func TestToolNameMapping(t *testing.T) {
 			// Check length constraints
 			assert.Equal(t, tt.wantLen, len(toolName), "tool name length mismatch")
 
-			// Check prefix
-			assert.True(t, strings.HasPrefix(toolName, tt.wantPrefix),
-				"tool name should start with the expected prefix")
-
-			// For long names, verify the hash suffix format
+			// For long names, verify the structure
 			if len(tt.operationId) > 64 {
-				// Check that there's an underscore separator
-				parts := strings.Split(toolName, "_")
-				assert.Equal(t, 2, len(parts), "long tool name should have exactly one underscore separator")
+				// Verify the prefix is exactly 55 characters
+				prefix := toolName[:55]
+				assert.Equal(t, tt.wantPrefix, prefix, "prefix mismatch")
+
+				// Check that there's an underscore separator at position 55
+				assert.Equal(t, "_", string(toolName[55]), "underscore separator not found at position 55")
 
 				// Verify hash part length (should be 8 characters)
-				assert.Equal(t, 8, len(parts[1]), "hash suffix should be 8 characters")
+				hash := toolName[56:]
+				assert.Equal(t, 8, len(hash), "hash suffix should be 8 characters")
 
 				// Verify the hash is URL-safe base64
-				for _, c := range parts[1] {
+				for _, c := range hash {
 					assert.Contains(t,
 						"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_",
 						string(c),
 						"hash should only contain URL-safe base64 characters")
 				}
+			} else {
+				// For short names, verify exact match
+				assert.Equal(t, tt.wantPrefix, toolName, "tool name mismatch for short operation ID")
 			}
 
 			// Check bijectivity - each operation ID should generate a unique tool name
