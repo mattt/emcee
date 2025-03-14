@@ -354,7 +354,6 @@ func (s *Server) handleToolsList(request *ToolsListRequest) (*ToolsListResponse,
 				description = op.op.Summary
 			}
 
-			// Handle operation ID length with hash for uniqueness
 			toolName := getToolName(op.op.OperationId)
 			tools = append(tools, Tool{
 				Name:        toolName,
