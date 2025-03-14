@@ -778,3 +778,152 @@ func TestPathJoining(t *testing.T) {
 		})
 	}
 }
+
+func TestToolNameMapping(t *testing.T) {
+	tests := []struct {
+		name        string
+		operationId string
+		wantLen     int
+		wantPrefix  string
+	}{
+		{
+			name:        "short operation ID",
+			operationId: "listPets",
+			wantLen:     8,
+			wantPrefix:  "listPets",
+		},
+		{
+			name:        "exactly 64 characters",
+			operationId: strings.Repeat("a", 64),
+			wantLen:     64,
+			wantPrefix:  strings.Repeat("a", 64),
+		},
+		{
+			name:        "long operation ID",
+			operationId: "thisIsAVeryLongOperationIdThatExceedsTheSixtyFourCharacterLimitAndNeedsToBeHandledProperly",
+			wantLen:     64,
+			wantPrefix:  "thisIsAVeryLongOperationIdThatExceedsTheSixtyFourCharacterLimitAndNe",
+		},
+		{
+			name:        "multiple long IDs generate different names",
+			operationId: "anotherVeryLongOperationIdThatExceedsTheSixtyFourCharacterLimitAndNeedsToBeHandledProperly",
+			wantLen:     64,
+			wantPrefix:  "anotherVeryLongOperationIdThatExceedsTheSixtyFourCharacterLimitAndN",
+		},
+	}
+
+	// Store generated names to check for uniqueness
+	generatedNames := make(map[string]string)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Get the tool name
+			toolName := getToolName(tt.operationId)
+
+			// Check length constraints
+			assert.Equal(t, tt.wantLen, len(toolName), "tool name length mismatch")
+
+			// Check prefix
+			assert.True(t, strings.HasPrefix(toolName, tt.wantPrefix),
+				"tool name should start with the expected prefix")
+
+			// For long names, verify the hash suffix format
+			if len(tt.operationId) > 64 {
+				// Check that there's an underscore separator
+				parts := strings.Split(toolName, "_")
+				assert.Equal(t, 2, len(parts), "long tool name should have exactly one underscore separator")
+
+				// Verify hash part length (should be 8 characters)
+				assert.Equal(t, 8, len(parts[1]), "hash suffix should be 8 characters")
+
+				// Verify the hash is URL-safe base64
+				for _, c := range parts[1] {
+					assert.Contains(t,
+						"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_",
+						string(c),
+						"hash should only contain URL-safe base64 characters")
+				}
+			}
+
+			// Check bijectivity - each operation ID should generate a unique tool name
+			if existing, exists := generatedNames[toolName]; exists {
+				assert.Equal(t, tt.operationId, existing,
+					"tool name collision detected: same name generated for different operation IDs")
+			}
+			generatedNames[toolName] = tt.operationId
+		})
+	}
+}
+
+func TestFindOperationByToolName(t *testing.T) {
+	// Create a test spec with a mix of short and long operation IDs
+	longOpId := "thisIsAVeryLongOperationIdThatExceedsTheSixtyFourCharacterLimitAndNeedsToBeHandledProperly"
+	spec := fmt.Sprintf(`{
+		"openapi": "3.0.0",
+		"servers": [{"url": "https://api.example.com"}],
+		"paths": {
+			"/pets": {
+				"get": {
+					"operationId": "listPets",
+					"description": "List pets"
+				}
+			},
+			"/very/long/path": {
+				"post": {
+					"operationId": "%s",
+					"description": "Operation with long ID"
+				}
+			}
+		}
+	}`, longOpId)
+
+	server, err := NewServer(WithSpecData([]byte(spec)))
+	require.NoError(t, err)
+
+	tests := []struct {
+		name       string
+		toolName   string
+		wantMethod string
+		wantPath   string
+		wantFound  bool
+	}{
+		{
+			name:       "find short operation ID",
+			toolName:   "listPets",
+			wantMethod: "GET",
+			wantPath:   "/pets",
+			wantFound:  true,
+		},
+		{
+			name:       "find long operation ID",
+			toolName:   getToolName(longOpId),
+			wantMethod: "POST",
+			wantPath:   "/very/long/path",
+			wantFound:  true,
+		},
+		{
+			name:      "operation not found",
+			toolName:  "nonexistentOperation",
+			wantFound: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			method, path, operation, pathItem, found := server.findOperationByToolName(tt.toolName)
+
+			assert.Equal(t, tt.wantFound, found)
+			if tt.wantFound {
+				assert.Equal(t, tt.wantMethod, method)
+				assert.Equal(t, tt.wantPath, path)
+				assert.NotNil(t, operation)
+				assert.NotNil(t, pathItem)
+			} else {
+				assert.Empty(t, method)
+				assert.Empty(t, path)
+				assert.Nil(t, operation)
+				assert.Nil(t, pathItem)
+			}
+		})
+	}
+}
