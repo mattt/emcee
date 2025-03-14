@@ -153,7 +153,8 @@ func (s *Server) HandleRequest(request jsonrpc.Request) *jsonrpc.Response {
 		s.logger.Info("handling request", "method", request.Method)
 	}
 
-	if strings.HasPrefix(request.Method, "notifications/") {
+	// Handle notifications first
+	if strings.HasPrefix(request.Method, "notifications/") || request.Method == "initialized" {
 		s.logger.Info("received notification", "method", request.Method)
 		return nil
 	}
@@ -215,18 +216,6 @@ func handleRequest[Req, Resp any](request jsonrpc.Request, handler func(*Req) (*
 	}
 
 	return jsonrpc.NewResponse(request.ID, result, nil)
-}
-
-// handleNotification is a helper to unmarshal params and call a notification handler
-func handleNotification[Req any](request jsonrpc.Request, handler func(*Req)) {
-	var req Req
-	if request.Params != nil {
-		if err := json.Unmarshal(request.Params, &req); err != nil {
-			return
-		}
-	}
-
-	handler(&req)
 }
 
 func (s *Server) handleInitialize(request *InitializeRequest) (*InitializeResponse, error) {
