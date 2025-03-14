@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -226,6 +227,7 @@ func (s *Server) handleInitialize(request *InitializeRequest) (*InitializeRespon
 	return response, nil
 }
 
+// Update the tools list generation to use the helper
 func (s *Server) handleToolsList(request *ToolsListRequest) (*ToolsListResponse, error) {
 	tools := []Tool{}
 	if s.model.Paths == nil || s.model.Paths.PathItems == nil {
@@ -352,8 +354,9 @@ func (s *Server) handleToolsList(request *ToolsListRequest) (*ToolsListResponse,
 				description = op.op.Summary
 			}
 
+			toolName := getToolName(op.op.OperationId)
 			tools = append(tools, Tool{
-				Name:        op.op.OperationId,
+				Name:        toolName,
 				Description: description,
 				InputSchema: inputSchema,
 			})
@@ -367,8 +370,9 @@ func (s *Server) handleToolsList(request *ToolsListRequest) (*ToolsListResponse,
 	return &ToolsListResponse{Tools: tools}, nil
 }
 
+// Update the tools call handler to use the new finder
 func (s *Server) handleToolsCall(request *ToolCallRequest) (*ToolCallResponse, error) {
-	method, p, operation, pathItem, found := s.findOperation(s.model, request.Name)
+	method, p, operation, pathItem, found := s.findOperationByToolName(request.Name)
 	if !found {
 		return nil, jsonrpc.NewError(jsonrpc.ErrMethodNotFound, nil)
 	}
@@ -560,35 +564,6 @@ func (s *Server) handlePing(request *PingRequest) (*PingResponse, error) {
 	return &PingResponse{}, nil
 }
 
-func (s *Server) findOperation(model *v3.Document, operationId string) (method, path string, operation *v3.Operation, pathItem *v3.PathItem, found bool) {
-	if model.Paths == nil || model.Paths.PathItems == nil {
-		return "", "", nil, nil, false
-	}
-
-	for pair := model.Paths.PathItems.First(); pair != nil; pair = pair.Next() {
-		pathStr := pair.Key()
-		item := pair.Value()
-
-		operations := []struct {
-			method string
-			op     *v3.Operation
-		}{
-			{"GET", item.Get},
-			{"POST", item.Post},
-			{"PUT", item.Put},
-			{"DELETE", item.Delete},
-			{"PATCH", item.Patch},
-		}
-
-		for _, op := range operations {
-			if op.op != nil && op.op.OperationId == operationId {
-				return op.method, pathStr, op.op, item, true
-			}
-		}
-	}
-	return "", "", nil, nil, false
-}
-
 // pathSegmentEscape escapes invalid URL path segment characters according to RFC 3986.
 // It preserves valid path characters including comma, colon, and @ sign.
 func pathSegmentEscape(s string) string {
@@ -644,4 +619,50 @@ func shouldEscape(c byte) bool {
 		return false
 	}
 	return true
+}
+
+// getToolName creates a unique tool name from an operation ID, ensuring it's within the 64-character limit
+// while maintaining a bijective mapping between operation IDs and tool names
+func getToolName(operationId string) string {
+	if len(operationId) <= 64 {
+		return operationId
+	}
+	// Generate a short hash of the full operation ID
+	hash := sha256.Sum256([]byte(operationId))
+	// Use base64 encoding for shorter hash representation (first 8 chars)
+	shortHash := base64.RawURLEncoding.EncodeToString(hash[:])[:8]
+	// Create a deterministic name that fits within limits while preserving uniqueness
+	return operationId[:55] + "_" + shortHash
+}
+
+// findOperationByToolName maps a tool name back to its corresponding OpenAPI operation
+func (s *Server) findOperationByToolName(toolName string) (method, path string, operation *v3.Operation, pathItem *v3.PathItem, found bool) {
+	if s.model.Paths == nil || s.model.Paths.PathItems == nil {
+		return "", "", nil, nil, false
+	}
+
+	for pair := s.model.Paths.PathItems.First(); pair != nil; pair = pair.Next() {
+		pathStr := pair.Key()
+		item := pair.Value()
+
+		operations := []struct {
+			method string
+			op     *v3.Operation
+		}{
+			{"GET", item.Get},
+			{"POST", item.Post},
+			{"PUT", item.Put},
+			{"DELETE", item.Delete},
+			{"PATCH", item.Patch},
+		}
+
+		for _, op := range operations {
+			if op.op != nil && op.op.OperationId != "" {
+				if getToolName(op.op.OperationId) == toolName {
+					return op.method, pathStr, op.op, item, true
+				}
+			}
+		}
+	}
+	return "", "", nil, nil, false
 }
