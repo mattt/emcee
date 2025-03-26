@@ -114,4 +114,46 @@ func TestIntegration(t *testing.T) {
 	assert.Equal(t, "string", pointParam["type"])
 	assert.Contains(t, pointParam["description"].(string), "Point (latitude, longitude)")
 	assert.Contains(t, pointTool.InputSchema.Required, "point", "Point parameter should be required")
+
+	var zoneTool struct {
+		Name        string
+		Description string
+		InputSchema struct {
+			Type       string                 `json:"type"`
+			Properties map[string]interface{} `json:"properties"`
+			Required   []string               `json:"required"`
+		}
+	}
+
+	foundZoneTool := false
+	for _, tool := range response.Result.Tools {
+		if tool.Name == "zone" {
+			foundZoneTool = true
+			err := json.Unmarshal(tool.InputSchema, &zoneTool.InputSchema)
+			require.NoError(t, err)
+			zoneTool.Name = tool.Name
+			zoneTool.Description = tool.Description
+			break
+		}
+	}
+
+	require.True(t, foundZoneTool, "Expected to find zone tool")
+	assert.Equal(t, "zone", zoneTool.Name)
+	assert.Contains(t, zoneTool.Description, "Returns metadata about a given zone")
+
+	// Verify zone tool has proper parameter schema
+	assert.Equal(t, "object", zoneTool.InputSchema.Type)
+	assert.Contains(t, zoneTool.InputSchema.Properties, "zoneId", "Zone tool should have 'zoneId' parameter")
+
+	typeParam := zoneTool.InputSchema.Properties["type"].(map[string]interface{})
+	assert.Equal(t, "string", typeParam["type"])
+	assert.Contains(t, typeParam["description"].(string), "Zone type")
+	assert.Contains(t, typeParam["description"].(string), "Allowed values: land, marine, ")
+	assert.Contains(t, zoneTool.InputSchema.Required, "type", "type parameter should be required")
+
+	zoneIdParam := zoneTool.InputSchema.Properties["zoneId"].(map[string]interface{})
+	assert.Equal(t, "string", zoneIdParam["type"])
+	assert.Contains(t, zoneIdParam["description"].(string), "NWS public zone/county identifier")
+	assert.Contains(t, zoneIdParam["description"].(string), "UGC identifier for a NWS")
+	assert.Contains(t, zoneTool.InputSchema.Required, "zoneId", "zoneId parameter should be required")
 }
