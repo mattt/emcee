@@ -688,7 +688,7 @@ func buildSchemaDescription(paramDesc string, paramSchema *base.Schema) string {
 	description := paramDesc
 
 	if paramSchema.Description != "" {
-		if description != "" {
+		if description != "" && description != paramSchema.Description {
 			description = fmt.Sprintf("%s. %s", description, paramSchema.Description)
 		} else {
 			description = paramSchema.Description
