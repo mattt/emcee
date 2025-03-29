@@ -15,7 +15,9 @@ import (
 	"strings"
 
 	"github.com/pb33f/libopenapi"
+	"github.com/pb33f/libopenapi/datamodel/high/base"
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
+	"gopkg.in/yaml.v3"
 
 	"github.com/loopwork-ai/emcee/internal"
 	"github.com/loopwork-ai/emcee/jsonrpc"
@@ -293,8 +295,11 @@ func (s *Server) handleToolsList(request *ToolsListRequest) (*ToolsListResponse,
 							if paramSchema.Pattern != "" {
 								schema["pattern"] = paramSchema.Pattern
 							}
+							// Add enum values to description if they exist
+							schema["description"] = buildSchemaDescription(param.Description, paramSchema)
+						} else {
+							schema["description"] = param.Description
 						}
-						schema["description"] = param.Description
 						inputSchema.Properties[param.Name] = schema
 						if param.Required != nil && *param.Required {
 							inputSchema.Required = append(inputSchema.Required, param.Name)
@@ -317,8 +322,11 @@ func (s *Server) handleToolsList(request *ToolsListRequest) (*ToolsListResponse,
 							if paramSchema.Pattern != "" {
 								schema["pattern"] = paramSchema.Pattern
 							}
+							// Add enum values to description if they exist
+							schema["description"] = buildSchemaDescription(param.Description, paramSchema)
+						} else {
+							schema["description"] = param.Description
 						}
-						schema["description"] = param.Description
 						inputSchema.Properties[param.Name] = schema
 						if param.Required != nil && *param.Required {
 							inputSchema.Required = append(inputSchema.Required, param.Name)
@@ -341,9 +349,11 @@ func (s *Server) handleToolsList(request *ToolsListRequest) (*ToolsListResponse,
 									if len(propSchema.Type) > 0 {
 										schemaType = propSchema.Type[0]
 									}
+									// Add enum values to description if they exist
+									description := buildSchemaDescription("", propSchema)
 									inputSchema.Properties[propName] = map[string]interface{}{
 										"type":        schemaType,
-										"description": propSchema.Description,
+										"description": description,
 									}
 								}
 							}
@@ -671,4 +681,44 @@ func (s *Server) findOperationByToolName(toolName string) (method, path string, 
 		}
 	}
 	return "", "", nil, nil, false
+}
+
+// buildSchemaDescription builds a description string from parameter and schema descriptions, and enum values
+func buildSchemaDescription(paramDesc string, paramSchema *base.Schema) string {
+	description := paramDesc
+
+	if paramSchema.Description != "" {
+		if description != "" && description != paramSchema.Description {
+			description = fmt.Sprintf("%s. %s", description, paramSchema.Description)
+		} else {
+			description = paramSchema.Description
+		}
+	}
+
+	var enumValues []string
+	if len(paramSchema.Enum) > 0 {
+		enumValues = getEnumValues(paramSchema.Enum)
+	}
+
+	if len(enumValues) > 0 {
+		if description != "" {
+			description = fmt.Sprintf("%s (Allowed values: %s)", description, strings.Join(enumValues, ", "))
+		} else {
+			description = fmt.Sprintf("Allowed values: %s", strings.Join(enumValues, ", "))
+		}
+	}
+
+	return description
+}
+
+// getEnumValues extracts enum values from a schema's enum field
+func getEnumValues(enum []*yaml.Node) []string {
+	if len(enum) == 0 {
+		return nil
+	}
+	values := make([]string, len(enum))
+	for i, v := range enum {
+		values[i] = v.Value
+	}
+	return values
 }
