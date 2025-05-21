@@ -197,6 +197,11 @@ Authentication values can be provided directly or as 1Password secret references
 			// Set spec data
 			opts = append(opts, mcp.WithSpecData(specData))
 
+			// Apply configuration if provided
+			if configFile != "" {
+				opts = append(opts, mcp.WithConfigFile(configFile))
+			}
+
 			// Create server
 			server, err := mcp.NewServer(opts...)
 			if err != nil {
@@ -216,6 +221,7 @@ var (
 	bearerAuth string
 	basicAuth  string
 	rawAuth    string
+	configFile string
 
 	retries int
 	timeout time.Duration
@@ -233,6 +239,7 @@ func init() {
 	rootCmd.Flags().StringVar(&bearerAuth, "bearer-auth", "", "Bearer token value (will be prefixed with 'Bearer ')")
 	rootCmd.Flags().StringVar(&basicAuth, "basic-auth", "", "Basic auth value (either user:pass or base64 encoded, will be prefixed with 'Basic ')")
 	rootCmd.Flags().StringVar(&rawAuth, "raw-auth", "", "Raw value for Authorization header")
+	rootCmd.Flags().StringVar(&configFile, "config", "", "Path to configuration file for customizing API access")
 	rootCmd.MarkFlagsMutuallyExclusive("bearer-auth", "basic-auth", "raw-auth")
 
 	rootCmd.Flags().IntVar(&retries, "retries", 3, "Maximum number of retries for failed requests")

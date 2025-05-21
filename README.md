@@ -94,8 +94,8 @@ without a dashboard or client library.
 
 ### Installer Script
 
-Use the [installer script][installer] to download and install a 
-[pre-built release][releases] of emcee for your platform 
+Use the [installer script][installer] to download and install a
+[pre-built release][releases] of emcee for your platform
 (Linux x86-64/i386/arm64 and macOS Intel/Apple Silicon).
 
 ```console
@@ -206,8 +206,8 @@ op signin
 
 <img src="https://github.com/user-attachments/assets/d639fd7c-f3bf-477c-9eb7-229285b36f7d" alt="1Password Access Requested" width="512">
 
-> [!IMPORTANT]  
-> emcee doesn't use auth credentials when downloading 
+> [!IMPORTANT]
+> emcee doesn't use auth credentials when downloading
 > OpenAPI specifications from URLs provided as command arguments.
 > If your OpenAPI specification requires authentication to access,
 > first download it to a local file using your preferred HTTP client,
@@ -218,7 +218,7 @@ op signin
 You can transform OpenAPI specifications before passing them to emcee using standard Unix utilities. This is useful for:
 - Selecting specific endpoints to expose as tools
   with [jq][jq] or [yq][yq]
-- Modifying descriptions or parameters 
+- Modifying descriptions or parameters
   with [OpenAPI Overlays][openapi-overlays]
 - Combining multiple specifications
   with [Redocly][redocly-cli]
@@ -230,6 +230,69 @@ you can use `jq` to include only the `point` tool from `weather.gov`.
 cat path/to/openapi.json | \
   jq 'if .paths then .paths |= with_entries(select(.key == "/points/{point}")) else . end' | \
   emcee
+```
+
+### Disabling Operations
+
+You can selectively disable certain API operations or endpoints using a configuration file. This is useful when you want to limit access to destructive operations like DELETE or specific sensitive endpoints.
+
+Create a JSON configuration file with the following structure:
+
+```json
+{
+  "disabledOperations": {
+    "get": false,
+    "post": false,
+    "put": false,
+    "delete": true,  // Disable all DELETE operations
+    "patch": false,
+    "head": false,
+    "options": false
+  },
+  "disabledEndpoints": [
+    "createUser",    // Disable specific operations by OperationId
+    "updateSensitiveData"
+  ],
+  "disabledPaths": [
+    "/admin/.*"      // Disable paths matching regex patterns (not yet implemented)
+  ]
+}
+```
+
+Then provide the path to this configuration file when using emcee:
+
+```console
+emcee --config path/to/config.json https://api.example.com/openapi.json
+```
+
+Or in Claude Desktop's configuration:
+
+```json
+{
+  "mcpServers": {
+    "myapi": {
+      "command": "emcee",
+      "args": [
+        "--config", "/path/to/config.json",
+        "https://api.example.com/openapi.json"
+      ]
+    }
+  }
+}
+```
+
+An additional demonstration using the weather API `api.weather.gov`. To test this with Claude Desktop
+
+```json
+{
+  "mcpServers": {
+    "weather-restricted": {
+      "command": "emcee",
+      "args": [
+        "--config", "path/to/repo/emcee-config-no-alerts.json",
+        "https://api.weather.gov/openapi.json"
+      ]
+    }
 ```
 
 

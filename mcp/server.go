@@ -20,6 +20,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/loopwork-ai/emcee/internal"
+	"github.com/loopwork-ai/emcee/internal/config"
 	"github.com/loopwork-ai/emcee/jsonrpc"
 )
 
@@ -32,6 +33,7 @@ type Server struct {
 	client  *http.Client
 	info    ServerInfo
 	logger  *slog.Logger
+	config  *config.EmceeConfig
 }
 
 // ServerOption configures a Server
@@ -77,6 +79,26 @@ func WithServerInfo(name, version string) ServerOption {
 	}
 }
 
+// WithConfig sets the configuration for the server
+func WithConfig(cfg *config.EmceeConfig) ServerOption {
+	return func(s *Server) error {
+		s.config = cfg
+		return nil
+	}
+}
+
+// WithConfigFile loads configuration from a file
+func WithConfigFile(path string) ServerOption {
+	return func(s *Server) error {
+		cfg, err := config.LoadFile(path)
+		if err != nil {
+			return fmt.Errorf("error loading config file: %v", err)
+		}
+		s.config = cfg
+		return nil
+	}
+}
+
 // WithSpecData sets the OpenAPI spec from a byte slice
 func WithSpecData(data []byte) ServerOption {
 	return func(s *Server) error {
@@ -113,6 +135,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		client: &http.Client{
 			Transport: http.DefaultTransport,
 		},
+		config: config.DefaultConfig(),
 	}
 
 	// Apply options
@@ -249,6 +272,8 @@ func (s *Server) handleToolsList(request *ToolsListRequest) (*ToolsListResponse,
 	// Iterate through paths and operations
 	for pair := s.model.Paths.PathItems.First(); pair != nil; pair = pair.Next() {
 		pathItem := pair.Value()
+		// Get path string (currently unused but will be used for path-based filtering in future)
+		_ = pair.Key()
 
 		// Process each operation type
 		operations := []struct {
@@ -266,6 +291,27 @@ func (s *Server) handleToolsList(request *ToolsListRequest) (*ToolsListResponse,
 			if op.op == nil || op.op.OperationId == "" {
 				continue
 			}
+			
+			// Skip disabled operations and endpoints
+			if s.config != nil {
+				if s.config.IsOperationDisabled(op.method) {
+					if s.logger != nil {
+						s.logger.Debug("skipping disabled operation type",
+							"method", op.method,
+							"operation_id", op.op.OperationId)
+					}
+					continue
+				}
+				
+				if s.config.IsEndpointDisabled(op.op.OperationId) {
+					if s.logger != nil {
+						s.logger.Debug("skipping disabled endpoint",
+							"operation_id", op.op.OperationId)
+					}
+					continue
+				}
+			}
+			
 			if s.logger != nil {
 				s.logger.Debug("discovered tool",
 					"operation_id", op.op.OperationId,
@@ -391,6 +437,28 @@ func (s *Server) handleToolsCall(request *ToolCallRequest) (*ToolCallResponse, e
 	method, p, operation, pathItem, found := s.findOperationByToolName(request.Name)
 	if !found {
 		return nil, jsonrpc.NewError(jsonrpc.ErrMethodNotFound, nil)
+	}
+	
+	// Check if operation is disabled
+	if s.config != nil {
+		if s.config.IsOperationDisabled(method) {
+			if s.logger != nil {
+				s.logger.Warn("attempt to call disabled operation type",
+					"method", method,
+					"operation_id", operation.OperationId)
+			}
+			return nil, jsonrpc.NewError(jsonrpc.ErrMethodNotFound, 
+				NewTextContent(fmt.Sprintf("Operation type %s is disabled", method), []Role{RoleAssistant}, nil))
+		}
+		
+		if s.config.IsEndpointDisabled(operation.OperationId) {
+			if s.logger != nil {
+				s.logger.Warn("attempt to call disabled endpoint",
+					"operation_id", operation.OperationId)
+			}
+			return nil, jsonrpc.NewError(jsonrpc.ErrMethodNotFound, 
+				NewTextContent(fmt.Sprintf("Endpoint %s is disabled", operation.OperationId), []Role{RoleAssistant}, nil))
+		}
 	}
 
 	// Build URL from base URL and path

@@ -1,0 +1,20 @@
+{
+  "disabledOperations": {
+    "get": false,
+    "post": false,
+    "put": false,
+    "delete": true,
+    "patch": false,
+    "head": false,
+    "options": false
+  },
+  "disabledEndpoints": [
+    "createResource",
+    "updateSensitiveData",
+    "getAdminAccess"
+  ],
+  "disabledPaths": [
+    "/admin/.*",
+    "/v1/internal/.*"
+  ]
+}

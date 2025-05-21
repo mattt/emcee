@@ -1,0 +1,24 @@
+{
+  "disabledOperations": {
+    "get": false,
+    "post": false,
+    "put": false,
+    "delete": true,
+    "patch": false,
+    "head": false,
+    "options": false
+  },
+  "disabledEndpoints": [
+    "alerts_query",
+    "alerts_active",
+    "alerts_active_count",
+    "alerts_active_zone",
+    "alerts_active_area",
+    "alerts_active_region",
+    "alerts_types",
+    "alerts_single"
+  ],
+  "disabledPaths": [
+    "/alerts/.*"
+  ]
+}
