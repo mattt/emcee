@@ -13,8 +13,8 @@ import (
 	"io"
 	"log/slog"
 
-	"github.com/loopwork-ai/emcee/internal"
-	"github.com/loopwork-ai/emcee/jsonrpc"
+	"github.com/loopwork/emcee/internal"
+	"github.com/loopwork/emcee/jsonrpc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

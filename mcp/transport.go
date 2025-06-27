@@ -9,7 +9,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/loopwork-ai/emcee/jsonrpc"
+	"github.com/loopwork/emcee/jsonrpc"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/unix"
 )

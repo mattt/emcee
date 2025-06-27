@@ -15,7 +15,7 @@ you can get up-and-running quickly.
 
 ```bash
 # Install emcee
-brew install loopwork-ai/tap/emcee
+brew install loopwork/tap/emcee
 ```
 
 Make sure you have [Claude Desktop](https://claude.ai/download) installed.
@@ -42,9 +42,7 @@ Add the following configuration to add the weather.gov MCP server:
   "mcpServers": {
     "weather": {
       "command": "emcee",
-      "args": [
-        "https://api.weather.gov/openapi.json"
-      ]
+      "args": ["https://api.weather.gov/openapi.json"]
     }
   }
 }
@@ -94,8 +92,8 @@ without a dashboard or client library.
 
 ### Installer Script
 
-Use the [installer script][installer] to download and install a 
-[pre-built release][releases] of emcee for your platform 
+Use the [installer script][installer] to download and install a
+[pre-built release][releases] of emcee for your platform
 (Linux x86-64/i386/arm64 and macOS Intel/Apple Silicon).
 
 ```console
@@ -111,7 +109,7 @@ sh <(curl -fsSL https://get.emcee.sh)
 Install emcee using [Homebrew][homebrew] from [Loopwork's tap][homebrew-tap].
 
 ```console
-brew install loopwork-ai/tap/emcee
+brew install loopwork/tap/emcee
 ```
 
 ### Docker
@@ -119,7 +117,7 @@ brew install loopwork-ai/tap/emcee
 Prebuilt [Docker images][docker-images] with emcee are available.
 
 ```console
-docker run -it ghcr.io/loopwork-ai/emcee
+docker run -it ghcr.io/loopwork/emcee
 ```
 
 ### Build From Source
@@ -127,7 +125,7 @@ docker run -it ghcr.io/loopwork-ai/emcee
 Requires [go 1.24][golang] or later.
 
 ```console
-git clone https://github.com/loopwork-ai/emcee.git
+git clone https://github.com/loopwork/emcee.git
 cd emcee
 go build -o emcee cmd/emcee/main.go
 ```
@@ -167,16 +165,17 @@ and logs to stderr.
 For APIs that require authentication,
 emcee supports several authentication methods:
 
-| Authentication Type | Example Usage | Resulting Header |
-|------------------------|---------------|----------------------------|
-| **Bearer Token** | `--bearer-auth="abc123"` | `Authorization: Bearer abc123` |
-| **Basic Auth** | `--basic-auth="user:pass"` | `Authorization: Basic dXNlcjpwYXNz` |
-| **Raw Value** | `--raw-auth="Custom xyz789"` | `Authorization: Custom xyz789` |
+| Authentication Type | Example Usage                | Resulting Header                    |
+| ------------------- | ---------------------------- | ----------------------------------- |
+| **Bearer Token**    | `--bearer-auth="abc123"`     | `Authorization: Bearer abc123`      |
+| **Basic Auth**      | `--basic-auth="user:pass"`   | `Authorization: Basic dXNlcjpwYXNz` |
+| **Raw Value**       | `--raw-auth="Custom xyz789"` | `Authorization: Custom xyz789`      |
 
 These authentication values can be provided directly
 or as [1Password secret references][secret-reference-syntax].
 
 When using 1Password references:
+
 - Use the format `op://vault/item/field`
   (e.g. `--bearer-auth="op://Shared/X/credential"`)
 - Ensure the 1Password CLI ([op][op]) is installed and available in your `PATH`
@@ -207,7 +206,7 @@ op signin
 <img src="https://github.com/user-attachments/assets/d639fd7c-f3bf-477c-9eb7-229285b36f7d" alt="1Password Access Requested" width="512">
 
 > [!IMPORTANT]  
-> emcee doesn't use auth credentials when downloading 
+> emcee doesn't use auth credentials when downloading
 > OpenAPI specifications from URLs provided as command arguments.
 > If your OpenAPI specification requires authentication to access,
 > first download it to a local file using your preferred HTTP client,
@@ -216,9 +215,10 @@ op signin
 ### Transforming OpenAPI Specifications
 
 You can transform OpenAPI specifications before passing them to emcee using standard Unix utilities. This is useful for:
+
 - Selecting specific endpoints to expose as tools
   with [jq][jq] or [yq][yq]
-- Modifying descriptions or parameters 
+- Modifying descriptions or parameters
   with [OpenAPI Overlays][openapi-overlays]
 - Combining multiple specifications
   with [Redocly][redocly-cli]
@@ -231,7 +231,6 @@ cat path/to/openapi.json | \
   jq 'if .paths then .paths |= with_entries(select(.key == "/points/{point}")) else . end' | \
   emcee
 ```
-
 
 ### JSON-RPC
 
@@ -249,7 +248,7 @@ by sending JSON-RPC requests.
 <summary>Request</summary>
 
 ```json
-{"jsonrpc": "2.0", "method": "tools/list", "params": {}, "id": 1}
+{ "jsonrpc": "2.0", "method": "tools/list", "params": {}, "id": 1 }
 ```
 
 </details>
@@ -260,30 +259,31 @@ by sending JSON-RPC requests.
 
 ```jsonc
 {
-  "jsonrpc":"2.0",
+  "jsonrpc": "2.0",
   "result": {
     "tools": [
       // ...
       {
-          "name": "tafs",
-          "description": "Returns Terminal Aerodrome Forecasts for the specified airport station.",
-          "inputSchema": {
-              "type": "object",
-              "properties": {
-                  "stationId": {
-                      "description": "Observation station ID",
-                      "type": "string"
-                  }
-              },
-              "required": ["stationId"]
-          }
-      },
+        "name": "tafs",
+        "description": "Returns Terminal Aerodrome Forecasts for the specified airport station.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "stationId": {
+              "description": "Observation station ID",
+              "type": "string"
+            }
+          },
+          "required": ["stationId"]
+        }
+      }
       // ...
     ]
   },
   "id": 1
 }
 ```
+
 </details>
 
 #### Call Tool
@@ -293,7 +293,12 @@ by sending JSON-RPC requests.
 <summary>Request</summary>
 
 ```json
-{"jsonrpc": "2.0", "method": "tools/call", "params": { "name": "taf", "arguments": { "stationId": "KPDX" }}, "id": 1}
+{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "params": { "name": "taf", "arguments": { "stationId": "KPDX" } },
+  "id": 1
+}
 ```
 
 </details>
@@ -341,11 +346,11 @@ emcee is licensed under the Apache License, Version 2.0.
 
 [chatgpt-plugins]: https://openai.com/index/chatgpt-plugins/
 [claude]: https://claude.ai/download
-[docker-images]: https://github.com/loopwork-ai/emcee/pkgs/container/emcee
+[docker-images]: https://github.com/loopwork/emcee/pkgs/container/emcee
 [golang]: https://go.dev
 [homebrew]: https://brew.sh
-[homebrew-tap]: https://github.com/loopwork-ai/homebrew-tap
-[installer]: https://github.com/loopwork-ai/emcee/blob/main/tools/install.sh
+[homebrew-tap]: https://github.com/loopwork/homebrew-tap
+[installer]: https://github.com/loopwork/emcee/blob/main/tools/install.sh
 [jq]: https://github.com/jqlang/jq
 [mcp]: https://modelcontextprotocol.io/
 [mcp-clients]: https://modelcontextprotocol.info/docs/clients/
@@ -355,6 +360,6 @@ emcee is licensed under the Apache License, Version 2.0.
 [openapi]: https://openapi.org
 [openapi-overlays]: https://www.openapis.org/blog/2024/10/22/announcing-overlay-specification
 [redocly-cli]: https://redocly.com/docs/cli/commands
-[releases]: https://github.com/loopwork-ai/emcee/releases
+[releases]: https://github.com/loopwork/emcee/releases
 [secret-reference-syntax]: https://developer.1password.com/docs/cli/secret-reference-syntax/
 [yq]: https://github.com/mikefarah/yq

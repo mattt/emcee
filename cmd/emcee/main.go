@@ -16,8 +16,8 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/loopwork-ai/emcee/internal"
-	"github.com/loopwork-ai/emcee/mcp"
+	"github.com/loopwork/emcee/internal"
+	"github.com/loopwork/emcee/mcp"
 )
 
 var rootCmd = &cobra.Command{

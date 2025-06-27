@@ -10,7 +10,7 @@ import (
 
 	"net/http/httptest"
 
-	"github.com/loopwork-ai/emcee/jsonrpc"
+	"github.com/loopwork/emcee/jsonrpc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
