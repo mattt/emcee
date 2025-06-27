@@ -1,14 +1,14 @@
 #!/bin/sh
 #
 # This script should be run via curl:
-#   sh -c "$(curl -fsSL https://raw.githubusercontent.com/loopwork-ai/emcee/main/tools/install.sh)"
+#   sh -c "$(curl -fsSL https://raw.githubusercontent.com/loopwork/emcee/main/tools/install.sh)"
 # or via wget:
-#   sh -c "$(wget -qO- https://raw.githubusercontent.com/loopwork-ai/emcee/main/tools/install.sh)"
+#   sh -c "$(wget -qO- https://raw.githubusercontent.com/loopwork/emcee/main/tools/install.sh)"
 # or via fetch:
-#   sh -c "$(fetch -o - https://raw.githubusercontent.com/loopwork-ai/emcee/main/tools/install.sh)"
+#   sh -c "$(fetch -o - https://raw.githubusercontent.com/loopwork/emcee/main/tools/install.sh)"
 #
 # As an alternative, you can first download the install script and run it afterwards:
-#   wget https://raw.githubusercontent.com/loopwork-ai/emcee/main/tools/install.sh
+#   wget https://raw.githubusercontent.com/loopwork/emcee/main/tools/install.sh
 #   sh install.sh
 #
 # You can tweak the install location by setting the INSTALL_DIR env var when running the script.
@@ -76,7 +76,7 @@ setup_emcee() {
   EMCEE_LOCATION="${INSTALL_DIR}/emcee"
   platform=$(get_platform) || exit 1
   
-  BINARY_URI="https://github.com/loopwork-ai/emcee/releases/latest/download/emcee_${platform}.tar.gz"
+  BINARY_URI="https://github.com/loopwork/emcee/releases/latest/download/emcee_${platform}.tar.gz"
 
   if [ -f "$EMCEE_LOCATION" ]; then
     echo "${FMT_YELLOW}A file already exists at $EMCEE_LOCATION${FMT_RESET}"

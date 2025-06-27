@@ -27,7 +27,7 @@ archives:
 
 brews:
   - repository:
-      owner: loopwork-ai
+      owner: loopwork
       name: homebrew-tap
       token: "{{ .Env.GH_PAT }}"
     directory: Formula
@@ -38,7 +38,7 @@ kos:
       - linux/arm64
     tags:
       - latest
-      - '{{ .Tag }}'
+      - "{{ .Tag }}"
     bare: true
     flags:
       - -trimpath

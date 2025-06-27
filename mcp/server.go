@@ -19,8 +19,8 @@ import (
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"gopkg.in/yaml.v3"
 
-	"github.com/loopwork-ai/emcee/internal"
-	"github.com/loopwork-ai/emcee/jsonrpc"
+	"github.com/loopwork/emcee/internal"
+	"github.com/loopwork/emcee/jsonrpc"
 )
 
 // Server represents an MCP server that processes JSON-RPC requests
