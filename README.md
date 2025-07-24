@@ -15,7 +15,7 @@ you can get up-and-running quickly.
 
 ```bash
 # Install emcee
-brew install loopwork/tap/emcee
+brew install mattt/tap/emcee
 ```
 
 Make sure you have [Claude Desktop](https://claude.ai/download) installed.
@@ -67,14 +67,6 @@ and use the result to inform its response.
 
 ![Claude response with MCP tool use](https://github.com/user-attachments/assets/d5b63002-1ed3-4b03-bc71-8357427bb06b)
 
----
-
-> [!TIP]
-> Building agents? Want to deploy remote MCP servers?
-> Reach out to us at emcee@loopwork.com
-
----
-
 ## Why use emcee?
 
 MCP provides a standardized way to connect AI models to tools and data sources.
@@ -106,10 +98,10 @@ sh <(curl -fsSL https://get.emcee.sh)
 
 ### Homebrew
 
-Install emcee using [Homebrew][homebrew] from [Loopwork's tap][homebrew-tap].
+Install emcee using [Homebrew][homebrew].
 
 ```console
-brew install loopwork/tap/emcee
+brew install mattt/tap/emcee
 ```
 
 ### Docker
@@ -117,7 +109,7 @@ brew install loopwork/tap/emcee
 Prebuilt [Docker images][docker-images] with emcee are available.
 
 ```console
-docker run -it ghcr.io/loopwork/emcee
+docker run -it ghcr.io/mattt/emcee
 ```
 
 ### Build From Source
@@ -125,7 +117,7 @@ docker run -it ghcr.io/loopwork/emcee
 Requires [go 1.24][golang] or later.
 
 ```console
-git clone https://github.com/loopwork/emcee.git
+git clone https://github.com/mattt/emcee.git
 cd emcee
 go build -o emcee cmd/emcee/main.go
 ```
@@ -342,7 +334,8 @@ open http://localhost:5173
 
 ## License
 
-emcee is licensed under the Apache License, Version 2.0.
+This project is available under the MIT license.
+See the LICENSE file for more info.
 
 [chatgpt-plugins]: https://openai.com/index/chatgpt-plugins/
 [claude]: https://claude.ai/download

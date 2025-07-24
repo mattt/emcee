@@ -1,4 +1,4 @@
-module github.com/loopwork/emcee
+module github.com/mattt/emcee
 
 go 1.24.0
 
