@@ -342,7 +342,8 @@ open http://localhost:5173
 
 ## License
 
-emcee is licensed under the Apache License, Version 2.0.
+This project is available under the MIT license.
+See the LICENSE file for more info.
 
 [chatgpt-plugins]: https://openai.com/index/chatgpt-plugins/
 [claude]: https://claude.ai/download
