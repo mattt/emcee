@@ -339,11 +339,11 @@ See the LICENSE file for more info.
 
 [chatgpt-plugins]: https://openai.com/index/chatgpt-plugins/
 [claude]: https://claude.ai/download
-[docker-images]: https://github.com/loopwork/emcee/pkgs/container/emcee
+[docker-images]: https://github.com/mattt/emcee/pkgs/container/emcee
 [golang]: https://go.dev
 [homebrew]: https://brew.sh
-[homebrew-tap]: https://github.com/loopwork/homebrew-tap
-[installer]: https://github.com/loopwork/emcee/blob/main/tools/install.sh
+[homebrew-tap]: https://github.com/mattt/homebrew-tap
+[installer]: https://github.com/mattt/emcee/blob/main/tools/install.sh
 [jq]: https://github.com/jqlang/jq
 [mcp]: https://modelcontextprotocol.io/
 [mcp-clients]: https://modelcontextprotocol.info/docs/clients/
@@ -353,6 +353,6 @@ See the LICENSE file for more info.
 [openapi]: https://openapi.org
 [openapi-overlays]: https://www.openapis.org/blog/2024/10/22/announcing-overlay-specification
 [redocly-cli]: https://redocly.com/docs/cli/commands
-[releases]: https://github.com/loopwork/emcee/releases
+[releases]: https://github.com/mattt/emcee/releases
 [secret-reference-syntax]: https://developer.1password.com/docs/cli/secret-reference-syntax/
 [yq]: https://github.com/mikefarah/yq
