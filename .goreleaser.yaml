@@ -27,7 +27,7 @@ archives:
 
 brews:
   - repository:
-      owner: loopwork
+      owner: mattt
       name: homebrew-tap
       token: "{{ .Env.GH_PAT }}"
     directory: Formula
