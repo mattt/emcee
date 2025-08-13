@@ -129,8 +129,10 @@ func (t *Transport) Run(ctx context.Context, handler func(jsonrpc.Request) *json
 		defer cleanup()
 		defer close(lines)
 
-		buf := make([]byte, 1)
-		line := make([]byte, 0, 4096)
+		var buffer bytes.Buffer
+		var braceCount int // Tracks the balance of curly braces to find a complete JSON object.
+
+		readBuf := make([]byte, 4096)
 		for {
 			select {
 			case <-ctx.Done():
@@ -140,9 +142,9 @@ func (t *Transport) Run(ctx context.Context, handler func(jsonrpc.Request) *json
 				var err error
 
 				if fd != -1 {
-					n, err = unix.Read(fd, buf)
+					n, err = unix.Read(fd, readBuf)
 				} else {
-					n, err = t.reader.Read(buf)
+					n, err = t.reader.Read(readBuf)
 				}
 
 				if err != nil {
@@ -159,19 +161,70 @@ func (t *Transport) Run(ctx context.Context, handler func(jsonrpc.Request) *json
 					return nil
 				}
 
-				if buf[0] == '\n' || buf[0] == '\r' {
-					if len(line) > 0 {
+				// Append read data into the buffer.
+				buffer.Write(readBuf[:n])
+
+				// Process the buffer only if it contains data.
+				for buffer.Len() > 0 {
+					// Trim leading whitespace from the buffer.
+					trimmed := bytes.TrimLeft(buffer.Bytes(), " \t\n\r")
+					if len(trimmed) == 0 {
+						buffer.Reset()
+						continue
+					}
+					buffer = *bytes.NewBuffer(trimmed)
+
+					// If the buffer doesn't start with a '{', we are not at the beginning of a JSON object.
+					// This simple check waits for an object to start. More complex scenarios could involve
+					// searching for the next '{', but for now, we'll break and read more data.
+					if buffer.Bytes()[0] != '{' {
+						if braceCount == 0 {
+							break
+						}
+					}
+
+					// Scan the buffer to find the end of a complete JSON object.
+					var end int = -1
+					braceCount = 0
+					inString := false
+
+					scan := buffer.Bytes()
+					for i, char := range scan {
+						// Toggle inString flag if a non-escaped quote is found.
+						if char == '"' && (i == 0 || scan[i-1] != '\\') {
+							inString = !inString
+						}
+
+						// Skip brace counting if inside a string literal.
+						if inString {
+							continue
+						}
+
+						if char == '{' {
+							braceCount++
+						} else if char == '}' {
+							braceCount--
+							// When braceCount is zero, we've found a complete JSON object.
+							if braceCount == 0 {
+								end = i + 1
+								break
+							}
+						}
+					}
+
+					// If a complete object is found, send it to the lines channel.
+					if end != -1 {
+						fullMessage := buffer.Next(end)
 						select {
 						case <-ctx.Done():
 							return nil
-						case lines <- string(line):
-							line = line[:0]
+						case lines <- string(fullMessage):
 						}
+					} else {
+						// If the object is not yet complete, break the loop to read more data.
+						break
 					}
-					continue
 				}
-
-				line = append(line, buf[0])
 			}
 		}
 	})
