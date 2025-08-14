@@ -40,24 +40,56 @@ func TestIntegration(t *testing.T) {
 	// Give the process a moment to initialize
 	time.Sleep(100 * time.Millisecond)
 
-	// Prepare and send JSON-RPC request
-	request := map[string]interface{}{
-		"jsonrpc": "2.0",
-		"method":  "tools/list",
-		"params":  map[string]interface{}{},
-		"id":      1,
-	}
-
-	requestJSON, err := json.Marshal(request)
-	require.NoError(t, err)
-	requestJSON = append(requestJSON, '\n')
-
-	_, err = stdin.Write(requestJSON)
-	require.NoError(t, err)
-
-	// Read response using a scanner
+	// Perform MCP handshake (initialize + initialized), then list tools
 	scanner := bufio.NewScanner(stdout)
-	require.True(t, scanner.Scan(), "Expected to read a response line")
+
+	// initialize
+	initReq := map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "initialize",
+		"params": map[string]any{
+			"protocolVersion": "2025-06-18",
+			"capabilities":    map[string]any{},
+			"clientInfo": map[string]any{
+				"name":    "emcee-test",
+				"version": "dev",
+			},
+		},
+	}
+	initJSON, err := json.Marshal(initReq)
+	require.NoError(t, err)
+	initJSON = append(initJSON, '\n')
+	_, err = stdin.Write(initJSON)
+	require.NoError(t, err)
+	require.True(t, scanner.Scan(), "Expected initialize response")
+
+	// notifications/initialized
+	initialized := map[string]any{
+		"jsonrpc": "2.0",
+		"method":  "notifications/initialized",
+		"params":  map[string]any{},
+	}
+	initdJSON, err := json.Marshal(initialized)
+	require.NoError(t, err)
+	initdJSON = append(initdJSON, '\n')
+	_, err = stdin.Write(initdJSON)
+	require.NoError(t, err)
+
+	// tools/list
+	listReqID := 2
+	listReq := map[string]any{
+		"jsonrpc": "2.0",
+		"id":      listReqID,
+		"method":  "tools/list",
+		"params":  map[string]any{},
+	}
+	listJSON, err := json.Marshal(listReq)
+	require.NoError(t, err)
+	listJSON = append(listJSON, '\n')
+	_, err = stdin.Write(listJSON)
+	require.NoError(t, err)
+	require.True(t, scanner.Scan(), "Expected tools/list response")
 
 	var response struct {
 		JSONRPC string `json:"jsonrpc"`
@@ -76,7 +108,7 @@ func TestIntegration(t *testing.T) {
 
 	// Verify response
 	assert.Equal(t, "2.0", response.JSONRPC)
-	assert.Equal(t, 1, response.ID)
+	assert.Equal(t, listReqID, response.ID)
 	assert.NotEmpty(t, response.Result.Tools, "Expected at least one tool in response")
 
 	// Find and verify the point tool

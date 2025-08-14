@@ -17,7 +17,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/mattt/emcee/internal"
-	"github.com/mattt/emcee/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 var rootCmd = &cobra.Command{
@@ -66,78 +66,27 @@ Authentication values can be provided directly or as 1Password secret references
 		}
 
 		g.Go(func() error {
-			var opts []mcp.ServerOption
-
-			// Set server info
-			opts = append(opts, mcp.WithServerInfo(cmd.Name(), version))
-
-			// Set logger
-			opts = append(opts, mcp.WithLogger(logger))
-
-			// Set default headers if auth is provided
-			if bearerAuth != "" {
-				resolvedAuth, wasSecret, err := internal.ResolveSecretReference(ctx, bearerAuth)
-				if err != nil {
-					return fmt.Errorf("error resolving bearer auth: %w", err)
-				}
-				if wasSecret {
-					logger.Debug("resolved bearer auth from 1Password")
-				}
-				opts = append(opts, mcp.WithAuth("Bearer "+resolvedAuth))
-			} else if basicAuth != "" {
-				resolvedAuth, wasSecret, err := internal.ResolveSecretReference(ctx, basicAuth)
-				if err != nil {
-					return fmt.Errorf("error resolving basic auth: %w", err)
-				}
-				if wasSecret {
-					logger.Debug("resolved basic auth from 1Password")
-				}
-				// Check if already base64 encoded
-				if strings.Contains(resolvedAuth, ":") {
-					encoded := base64.StdEncoding.EncodeToString([]byte(resolvedAuth))
-					opts = append(opts, mcp.WithAuth("Basic "+encoded))
-				} else {
-					// Assume it's already base64 encoded
-					opts = append(opts, mcp.WithAuth("Basic "+resolvedAuth))
-				}
-			} else if rawAuth != "" {
-				resolvedAuth, wasSecret, err := internal.ResolveSecretReference(ctx, rawAuth)
-				if err != nil {
-					return fmt.Errorf("error resolving raw auth: %w", err)
-				}
-				if wasSecret {
-					logger.Debug("resolved raw auth from 1Password")
-				}
-				opts = append(opts, mcp.WithAuth(resolvedAuth))
-			}
-
-			// Set HTTP client
-			client, err := internal.RetryableClient(retries, timeout, rps, logger)
-			if err != nil {
-				return fmt.Errorf("error creating client: %w", err)
-			}
-			opts = append(opts, mcp.WithClient(client))
-
 			// Read OpenAPI specification data
-			var rpcInput io.Reader = os.Stdin
 			var specData []byte
 			if args[0] == "-" {
 				logger.Info("reading spec from stdin")
 
 				// When reading the OpenAPI spec from stdin, we need to read RPC input from /dev/tty
 				// since stdin is being used for the spec data and isn't available for interactive I/O
+				origStdin := os.Stdin
 				tty, err := os.Open("/dev/tty")
 				if err != nil {
 					return fmt.Errorf("error opening /dev/tty: %w", err)
 				}
 				defer tty.Close()
-				rpcInput = tty
 
-				// Read spec from stdin
-				specData, err = io.ReadAll(os.Stdin)
+				// Read spec from original stdin
+				specData, err = io.ReadAll(origStdin)
 				if err != nil {
 					return fmt.Errorf("error reading OpenAPI spec from stdin: %w", err)
 				}
+				// Redirect SDK stdio transport to use /dev/tty for input
+				os.Stdin = tty
 			} else if strings.HasPrefix(args[0], "http://") || strings.HasPrefix(args[0], "https://") {
 				logger.Info("reading spec from URL", "url", args[0])
 
@@ -148,7 +97,7 @@ Authentication values can be provided directly or as 1Password secret references
 				}
 
 				// Make HTTP request
-				resp, err := client.Do(req)
+				resp, err := http.DefaultClient.Do(req)
 				if err != nil {
 					return fmt.Errorf("error downloading spec: %w", err)
 				}
@@ -194,18 +143,61 @@ Authentication values can be provided directly or as 1Password secret references
 				}
 			}
 
-			// Set spec data
-			opts = append(opts, mcp.WithSpecData(specData))
-
-			// Create server
-			server, err := mcp.NewServer(opts...)
+			// Build HTTP client with optional auth header
+			client, err := internal.RetryableClient(retries, timeout, rps, logger)
 			if err != nil {
-				return fmt.Errorf("error creating server: %w", err)
+				return fmt.Errorf("error creating client: %w", err)
+			}
+			if bearerAuth != "" {
+				resolvedAuth, wasSecret, err := internal.ResolveSecretReference(ctx, bearerAuth)
+				if err != nil {
+					return fmt.Errorf("error resolving bearer auth: %w", err)
+				}
+				if wasSecret {
+					logger.Debug("resolved bearer auth from 1Password")
+				}
+				headers := http.Header{}
+				headers.Add("Authorization", "Bearer "+resolvedAuth)
+				client.Transport = &internal.HeaderTransport{Base: client.Transport, Headers: headers}
+			} else if basicAuth != "" {
+				resolvedAuth, wasSecret, err := internal.ResolveSecretReference(ctx, basicAuth)
+				if err != nil {
+					return fmt.Errorf("error resolving basic auth: %w", err)
+				}
+				if wasSecret {
+					logger.Debug("resolved basic auth from 1Password")
+				}
+				var value string
+				if strings.Contains(resolvedAuth, ":") {
+					value = base64.StdEncoding.EncodeToString([]byte(resolvedAuth))
+				} else {
+					value = resolvedAuth
+				}
+				headers := http.Header{}
+				headers.Add("Authorization", "Basic "+value)
+				client.Transport = &internal.HeaderTransport{Base: client.Transport, Headers: headers}
+			} else if rawAuth != "" {
+				resolvedAuth, wasSecret, err := internal.ResolveSecretReference(ctx, rawAuth)
+				if err != nil {
+					return fmt.Errorf("error resolving raw auth: %w", err)
+				}
+				if wasSecret {
+					logger.Debug("resolved raw auth from 1Password")
+				}
+				headers := http.Header{}
+				headers.Add("Authorization", resolvedAuth)
+				client.Transport = &internal.HeaderTransport{Base: client.Transport, Headers: headers}
 			}
 
-			// Create and run transport
-			transport := mcp.NewStdioTransport(rpcInput, os.Stdout, os.Stderr)
-			return transport.Run(ctx, server.HandleRequest)
+			// Create SDK server and register tools from OpenAPI
+			impl := &mcp.Implementation{Name: cmd.Name(), Version: version}
+			server := mcp.NewServer(impl, nil)
+			if err := internal.RegisterTools(server, specData, client); err != nil {
+				return fmt.Errorf("error registering tools: %w", err)
+			}
+
+			// Run over stdio; when spec was from stdin, we redirected os.Stdin to /dev/tty above.
+			return server.Run(ctx, &mcp.StdioTransport{})
 		})
 
 		return g.Wait()
