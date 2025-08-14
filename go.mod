@@ -5,7 +5,7 @@ go 1.24.0
 require (
 	github.com/google/jsonschema-go v0.2.0
 	github.com/hashicorp/go-retryablehttp v0.7.7
-	github.com/modelcontextprotocol/go-sdk v0.2.0
+	github.com/modelcontextprotocol/go-sdk v0.2.1-0.20250814153251-bb6dadecca24
 	github.com/pb33f/libopenapi v0.21.2
 	github.com/spf13/cobra v1.8.1
 	github.com/stretchr/testify v1.10.0
@@ -27,5 +27,3 @@ require (
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	golang.org/x/sys v0.30.0 // indirect
 )
-
-replace github.com/modelcontextprotocol/go-sdk => /Users/mattt/Code/mcp-go-sdk

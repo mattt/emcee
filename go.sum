@@ -29,6 +29,8 @@ github.com/mattn/go-colorable v0.1.13 h1:fFA4WZxdEF4tXPZVKMLwD8oUnCTTo08duU7wxec
 github.com/mattn/go-colorable v0.1.13/go.mod h1:7S9/ev0klgBDR4GtXTXX8a3vIGJpMovkB8vQcUbaXHg=
 github.com/mattn/go-isatty v0.0.20 h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWEY=
 github.com/mattn/go-isatty v0.0.20/go.mod h1:W+V8PltTTMOvKvAeJH7IuucS94S2C6jfK/D7dTCTo3Y=
+github.com/modelcontextprotocol/go-sdk v0.2.1-0.20250814153251-bb6dadecca24 h1:4ZvCNG2xcIVyC3QT3S+vpWkVp7YAgWg006jMMhwdFXw=
+github.com/modelcontextprotocol/go-sdk v0.2.1-0.20250814153251-bb6dadecca24/go.mod h1:71VUZVa8LL6WARvSgLJ7DMpDWSeomT4uBv8g97mGBvo=
 github.com/pb33f/libopenapi v0.21.2 h1:L99NhyXtcRIawo8aVmWPIfA6k8v+8t6zJrTZkv7ggMI=
 github.com/pb33f/libopenapi v0.21.2/go.mod h1:Gc8oQkjr2InxwumK0zOBtKN9gIlv9L2VmSVIUk2YxcU=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
