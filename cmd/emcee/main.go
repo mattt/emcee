@@ -192,7 +192,11 @@ Authentication values can be provided directly or as 1Password secret references
 			// Create SDK server and register tools from OpenAPI
 			impl := &mcp.Implementation{Name: cmd.Name(), Version: version}
 			server := mcp.NewServer(impl, nil)
-			if err := internal.RegisterTools(server, specData, client); err != nil {
+			var opts []internal.RegisterToolsOption
+			if noAnnotations {
+				opts = append(opts, internal.WithoutAnnotations())
+			}
+			if err := internal.RegisterTools(server, specData, client, opts...); err != nil {
 				return fmt.Errorf("error registering tools: %w", err)
 			}
 
@@ -213,8 +217,9 @@ var (
 	timeout time.Duration
 	rps     int
 
-	verbose bool
-	silent  bool
+	verbose       bool
+	silent        bool
+	noAnnotations bool
 
 	version = "dev"
 	commit  = "none"
@@ -234,6 +239,8 @@ func init() {
 	rootCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Enable debug level logging to stderr")
 	rootCmd.Flags().BoolVarP(&silent, "silent", "s", false, "Disable all logging")
 	rootCmd.MarkFlagsMutuallyExclusive("verbose", "silent")
+
+	rootCmd.Flags().BoolVar(&noAnnotations, "no-annotations", false, "Disable generated tool annotations")
 
 	rootCmd.Version = fmt.Sprintf("%s (commit: %s, built at: %s)", version, commit, date)
 }
