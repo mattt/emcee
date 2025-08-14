@@ -86,12 +86,14 @@ func RegisterTools(server *mcp.Server, specData []byte, client *http.Client) err
 					addParamToSchema(schema, param)
 				}
 			}
+
 			// Operation parameters
 			if op.op.Parameters != nil {
 				for _, param := range op.op.Parameters {
 					addParamToSchema(schema, param)
 				}
 			}
+
 			// Request body (application/json)
 			if op.op.RequestBody != nil && op.op.RequestBody.Content != nil {
 				if mediaType, ok := op.op.RequestBody.Content.Get("application/json"); ok && mediaType != nil {
@@ -115,10 +117,44 @@ func RegisterTools(server *mcp.Server, specData []byte, client *http.Client) err
 				}
 			}
 
+			// Derive MCP ToolAnnotations from REST conventions
+			title := op.op.Summary
+			if title == "" {
+				title = fmt.Sprintf("%s %s", op.method, p)
+			}
+			openWorld := true
+			destructiveTrue := true
+			ann := &mcp.ToolAnnotations{
+				Title:         title,
+				OpenWorldHint: &openWorld,
+			}
+			switch op.method {
+			case "GET":
+				ann.ReadOnlyHint = true
+				ann.IdempotentHint = true
+			case "POST":
+				ann.ReadOnlyHint = false
+				ann.IdempotentHint = false
+				ann.DestructiveHint = &destructiveTrue
+			case "PUT":
+				ann.ReadOnlyHint = false
+				ann.IdempotentHint = true
+				ann.DestructiveHint = &destructiveTrue
+			case "PATCH":
+				ann.ReadOnlyHint = false
+				ann.IdempotentHint = false
+				ann.DestructiveHint = &destructiveTrue
+			case "DELETE":
+				ann.ReadOnlyHint = false
+				ann.IdempotentHint = true
+				ann.DestructiveHint = &destructiveTrue
+			}
+
 			tool := &mcp.Tool{
 				Name:        toolName,
 				Description: desc,
 				InputSchema: schema,
+				Annotations: ann,
 			}
 
 			// Capture for handler
