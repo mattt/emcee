@@ -100,11 +100,16 @@ func RegisterTools(server *mcp.Server, specData []byte, client *http.Client, opt
 			// Build input schema
 			schema := &jsonschema.Schema{Type: "object"}
 			schema.Properties = make(map[string]*jsonschema.Schema)
+			// Track names used by path/query/header parameters to avoid collisions
+			paramNames := make(map[string]struct{})
 
 			// Path item parameters
 			if item.Parameters != nil {
 				for _, param := range item.Parameters {
 					addParamToSchema(schema, param)
+					if param != nil {
+						paramNames[param.Name] = struct{}{}
+					}
 				}
 			}
 
@@ -112,6 +117,9 @@ func RegisterTools(server *mcp.Server, specData []byte, client *http.Client, opt
 			if op.op.Parameters != nil {
 				for _, param := range op.op.Parameters {
 					addParamToSchema(schema, param)
+					if param != nil {
+						paramNames[param.Name] = struct{}{}
+					}
 				}
 			}
 
@@ -122,6 +130,10 @@ func RegisterTools(server *mcp.Server, specData []byte, client *http.Client, opt
 						if s := mediaType.Schema.Schema(); s.Properties != nil {
 							for prop := s.Properties.First(); prop != nil; prop = prop.Next() {
 								propName := prop.Key()
+								// Skip body properties that collide with parameter names
+								if _, exists := paramNames[propName]; exists {
+									continue
+								}
 								propSchema := prop.Value().Schema()
 								if propSchema == nil {
 									continue
@@ -131,7 +143,12 @@ func RegisterTools(server *mcp.Server, specData []byte, client *http.Client, opt
 								schema.Properties[propName] = sch
 							}
 							if s.Required != nil {
-								schema.Required = append(schema.Required, s.Required...)
+								for _, r := range s.Required {
+									if _, exists := paramNames[r]; exists {
+										continue
+									}
+									schema.Required = append(schema.Required, r)
+								}
 							}
 						}
 					}
@@ -211,17 +228,25 @@ func RegisterTools(server *mcp.Server, specData []byte, client *http.Client, opt
 				q := url.Values{}
 				headers := make(http.Header)
 				var bodyParams map[string]any
+				// Track parameter names applied to URL/query/headers
+				usedParamNames := make(map[string]struct{})
 
 				// Path item parameters
 				if pathItem.Parameters != nil {
 					for _, param := range pathItem.Parameters {
 						applyParam(param, req.Params.Arguments, u, q, headers)
+						if param != nil {
+							usedParamNames[param.Name] = struct{}{}
+						}
 					}
 				}
 				// Operation parameters
 				if operation.Parameters != nil {
 					for _, param := range operation.Parameters {
 						applyParam(param, req.Params.Arguments, u, q, headers)
+						if param != nil {
+							usedParamNames[param.Name] = struct{}{}
+						}
 					}
 				}
 
@@ -233,6 +258,10 @@ func RegisterTools(server *mcp.Server, specData []byte, client *http.Client, opt
 								bodyParams = make(map[string]any)
 								for prop := s.Properties.First(); prop != nil; prop = prop.Next() {
 									name := prop.Key()
+									// Skip colliding names so path/query/header take precedence
+									if _, exists := usedParamNames[name]; exists {
+										continue
+									}
 									if v, ok := req.Params.Arguments[name]; ok {
 										bodyParams[name] = v
 									}
