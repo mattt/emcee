@@ -57,11 +57,21 @@ func RetryableClient(opts RetryableClientOptions) (*http.Client, error) {
     retryClient.HTTPClient.Timeout = opts.Timeout
     retryClient.Logger = opts.Logger
     if opts.Insecure {
-		// Minimal transport overriding to skip TLS verification.
-		retryClient.HTTPClient.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}
-	}
+        // Clone the default transport to preserve defaults (pooling, timeouts, proxies), then override TLS.
+        if base, ok := http.DefaultTransport.(*http.Transport); ok && base != nil {
+            transport := base.Clone()
+            if transport.TLSClientConfig == nil {
+                transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+            } else {
+                transport.TLSClientConfig = transport.TLSClientConfig.Clone()
+                transport.TLSClientConfig.InsecureSkipVerify = true
+            }
+            retryClient.HTTPClient.Transport = transport
+        } else {
+            // Fallback: construct a new transport if default transport type is unexpected.
+            retryClient.HTTPClient.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+        }
+    }
     if opts.RPS > 0 {
         retryClient.Backoff = func(min, max time.Duration, attemptNum int, resp *http.Response) time.Duration {
 			// Ensure we wait at least 1/rps between requests

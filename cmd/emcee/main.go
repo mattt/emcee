@@ -100,7 +100,18 @@ Authentication values can be provided directly or as 1Password secret references
 				// Make HTTP request
 				client := http.DefaultClient
 				if insecure {
-					client = &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+					if base, ok := http.DefaultTransport.(*http.Transport); ok && base != nil {
+						transport := base.Clone()
+						if transport.TLSClientConfig == nil {
+							transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+						} else {
+							transport.TLSClientConfig = transport.TLSClientConfig.Clone()
+							transport.TLSClientConfig.InsecureSkipVerify = true
+						}
+						client = &http.Client{Transport: transport}
+					} else {
+						client = &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+					}
 				}
 				resp, err := client.Do(req)
 				if err != nil {
