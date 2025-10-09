@@ -1,11 +1,11 @@
 package main
 
 import (
+	"crypto/tls"
 	"encoding/base64"
 	"fmt"
 	"io"
 	"log/slog"
-	"crypto/tls"
 	"net/http"
 	"os"
 	"os/signal"
@@ -235,9 +235,9 @@ var (
 	basicAuth  string
 	rawAuth    string
 
-	retries int
-	timeout time.Duration
-	rps     int
+	retries  int
+	timeout  time.Duration
+	rps      int
 	insecure bool
 
 	verbose       bool
