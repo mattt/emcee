@@ -152,12 +152,12 @@ func RegisterTools(server *mcp.Server, specData []byte, client *http.Client, opt
 									if _, exists := paramNames[r]; exists {
 										continue
 									}
-                                    // Skip required fields that are readOnly
-                                    if prop, exists := s.Properties.Get(r); exists && prop != nil && prop.Schema() != nil {
-                                        if prop.Schema().ReadOnly != nil && *prop.Schema().ReadOnly {
-                                            continue
-                                        }
-                                    }
+									// Skip required fields that are readOnly
+									if prop, exists := s.Properties.Get(r); exists && prop != nil && prop.Schema() != nil {
+										if prop.Schema().ReadOnly != nil && *prop.Schema().ReadOnly {
+											continue
+										}
+									}
 									schema.Required = append(schema.Required, r)
 								}
 							}
