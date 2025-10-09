@@ -138,15 +138,26 @@ func RegisterTools(server *mcp.Server, specData []byte, client *http.Client, opt
 								if propSchema == nil {
 									continue
 								}
+								// Skip readOnly properties
+								if propSchema.ReadOnly != nil && *propSchema.ReadOnly {
+									continue
+								}
 								sch := &jsonschema.Schema{Type: typeOfSchema(propSchema)}
 								sch.Description = buildSchemaDescription("", propSchema)
 								schema.Properties[propName] = sch
 							}
 							if s.Required != nil {
 								for _, r := range s.Required {
+									// Skip required fields that collide with parameter names
 									if _, exists := paramNames[r]; exists {
 										continue
 									}
+                                    // Skip required fields that are readOnly
+                                    if prop, exists := s.Properties.Get(r); exists && prop != nil && prop.Schema() != nil {
+                                        if prop.Schema().ReadOnly != nil && *prop.Schema().ReadOnly {
+                                            continue
+                                        }
+                                    }
 									schema.Required = append(schema.Required, r)
 								}
 							}
@@ -260,6 +271,11 @@ func RegisterTools(server *mcp.Server, specData []byte, client *http.Client, opt
 									name := prop.Key()
 									// Skip colliding names so path/query/header take precedence
 									if _, exists := usedParamNames[name]; exists {
+										continue
+									}
+									propSchema := prop.Value().Schema()
+									// Skip readOnly properties in request body
+									if propSchema != nil && propSchema.ReadOnly != nil && *propSchema.ReadOnly {
 										continue
 									}
 									if v, ok := req.Params.Arguments[name]; ok {
