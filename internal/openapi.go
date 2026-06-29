@@ -82,10 +82,13 @@ func RegisterTools(server *mcp.Server, specData []byte, client *http.Client, opt
 			op     *v3.Operation
 		}{
 			{"GET", item.Get},
+			{"HEAD", item.Head},
+			{"OPTIONS", item.Options},
 			{"POST", item.Post},
 			{"PUT", item.Put},
 			{"DELETE", item.Delete},
 			{"PATCH", item.Patch},
+			{"TRACE", item.Trace},
 		}
 		for _, op := range ops {
 			if op.op == nil || op.op.OperationId == "" {
@@ -185,7 +188,7 @@ func RegisterTools(server *mcp.Server, specData []byte, client *http.Client, opt
 					OpenWorldHint: &openWorld,
 				}
 				switch op.method {
-				case "GET":
+				case "GET", "HEAD", "OPTIONS", "TRACE":
 					ann.ReadOnlyHint = true
 					ann.IdempotentHint = true
 				case "POST":

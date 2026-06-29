@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -12,7 +13,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestIntegration(t *testing.T) {
+type toolListResponse struct {
+	JSONRPC string `json:"jsonrpc"`
+	Result  struct {
+		Tools []struct {
+			Name        string          `json:"name"`
+			Description string          `json:"description"`
+			InputSchema json.RawMessage `json:"inputSchema"`
+		} `json:"tools"`
+	} `json:"result"`
+	ID int `json:"id"`
+}
+
+func listTools(t *testing.T, specPath string) toolListResponse {
+	t.Helper()
+
 	// Build the emcee binary for testing
 	tmpDir := t.TempDir()
 	binaryPath := filepath.Join(tmpDir, "emcee")
@@ -20,7 +35,6 @@ func TestIntegration(t *testing.T) {
 	require.NoError(t, buildCmd.Run(), "Failed to build emcee binary")
 
 	// Start emcee with the embedded test OpenAPI spec
-	specPath := "testdata/api.weather.gov/openapi.json"
 	cmd := exec.Command(binaryPath, specPath)
 	stdin, err := cmd.StdinPipe()
 	require.NoError(t, err)
@@ -91,24 +105,19 @@ func TestIntegration(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, scanner.Scan(), "Expected tools/list response")
 
-	var response struct {
-		JSONRPC string `json:"jsonrpc"`
-		Result  struct {
-			Tools []struct {
-				Name        string          `json:"name"`
-				Description string          `json:"description"`
-				InputSchema json.RawMessage `json:"inputSchema"`
-			} `json:"tools"`
-		} `json:"result"`
-		ID int `json:"id"`
-	}
-
+	var response toolListResponse
 	err = json.Unmarshal(scanner.Bytes(), &response)
 	require.NoError(t, err, "Failed to parse JSON response")
 
+	return response
+}
+
+func TestIntegration(t *testing.T) {
+	response := listTools(t, "testdata/api.weather.gov/openapi.json")
+
 	// Verify response
 	assert.Equal(t, "2.0", response.JSONRPC)
-	assert.Equal(t, listReqID, response.ID)
+	assert.Equal(t, 2, response.ID)
 	assert.NotEmpty(t, response.Result.Tools, "Expected at least one tool in response")
 
 	// Find and verify the point tool
@@ -188,4 +197,44 @@ func TestIntegration(t *testing.T) {
 	assert.Contains(t, zoneIdParam["description"].(string), "NWS public zone/county identifier")
 	assert.Contains(t, zoneIdParam["description"].(string), "UGC identifier for a NWS")
 	assert.Contains(t, zoneTool.InputSchema.Required, "zoneId", "zoneId parameter should be required")
+}
+
+func TestRegistersStandardOpenAPIMethods(t *testing.T) {
+	tmpDir := t.TempDir()
+	specPath := filepath.Join(tmpDir, "openapi.json")
+	spec := []byte(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Method coverage API", "version": "1.0.0"},
+  "servers": [{"url": "https://api.example.test"}],
+  "paths": {
+    "/resource": {
+      "head": {
+        "operationId": "headResource",
+        "summary": "Check whether the resource exists",
+        "responses": {"204": {"description": "No content"}}
+      },
+      "options": {
+        "operationId": "optionsResource",
+        "summary": "List supported methods",
+        "responses": {"200": {"description": "OK"}}
+      },
+      "trace": {
+        "operationId": "traceResource",
+        "summary": "Trace the request",
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`)
+	require.NoError(t, os.WriteFile(specPath, spec, 0o600))
+
+	response := listTools(t, specPath)
+	toolNames := make(map[string]struct{})
+	for _, tool := range response.Result.Tools {
+		toolNames[tool.Name] = struct{}{}
+	}
+
+	assert.Contains(t, toolNames, "headResource")
+	assert.Contains(t, toolNames, "optionsResource")
+	assert.Contains(t, toolNames, "traceResource")
 }
