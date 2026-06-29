@@ -370,7 +370,6 @@ See the LICENSE file for more info.
 [docker-images]: https://github.com/mattt/emcee/pkgs/container/emcee
 [golang]: https://go.dev
 [homebrew]: https://brew.sh
-[homebrew-tap]: https://github.com/mattt/homebrew-tap
 [installer]: https://github.com/mattt/emcee/blob/main/tools/install.sh
 [jq]: https://github.com/jqlang/jq
 [mcp]: https://modelcontextprotocol.io/
