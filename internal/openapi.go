@@ -378,6 +378,9 @@ func pathItemOperationNode(item *v3.PathItem, method string) *yaml.Node {
 	if root.Kind == yaml.DocumentNode && len(root.Content) > 0 {
 		root = root.Content[0]
 	}
+	if root.Kind != yaml.MappingNode {
+		return nil
+	}
 	for i := 0; i+1 < len(root.Content); i += 2 {
 		if strings.EqualFold(root.Content[i].Value, method) {
 			return root.Content[i+1]

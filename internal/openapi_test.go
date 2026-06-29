@@ -24,17 +24,23 @@ func TestRegisterToolsSupportsQueryExtension(t *testing.T) {
 }
 
 func testRegisterToolsSupportsQuery(t *testing.T, openAPIVersion, operationKey string) {
-	var gotMethod string
-	var gotBody map[string]any
+	type observedRequest struct {
+		method string
+		body   map[string]any
+		err    error
+	}
+	observed := make(chan observedRequest, 1)
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotMethod = r.Method
+		obs := observedRequest{method: r.Method}
 		body, err := io.ReadAll(r.Body)
-		require.NoError(t, err)
-		require.NoError(t, json.Unmarshal(body, &gotBody))
+		if err == nil {
+			err = json.Unmarshal(body, &obs.body)
+		}
+		obs.err = err
+		observed <- obs
 
 		w.Header().Set("Content-Type", "application/json")
-		_, err = w.Write([]byte(`{"ok":true}`))
-		require.NoError(t, err)
+		_, _ = w.Write([]byte(`{"ok":true}`))
 	}))
 	defer api.Close()
 
@@ -104,6 +110,8 @@ func testRegisterToolsSupportsQuery(t *testing.T, openAPIVersion, operationKey s
 	require.NoError(t, err)
 	require.False(t, result.IsError)
 
-	assert.Equal(t, "QUERY", gotMethod)
-	assert.Equal(t, map[string]any{"q": "emcee"}, gotBody)
+	obs := <-observed
+	require.NoError(t, obs.err)
+	assert.Equal(t, "QUERY", obs.method)
+	assert.Equal(t, map[string]any{"q": "emcee"}, obs.body)
 }
