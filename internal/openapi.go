@@ -18,6 +18,8 @@ import (
 	"github.com/pb33f/libopenapi"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
+	"github.com/pb33f/libopenapi/datamodel/low"
+	lowV3 "github.com/pb33f/libopenapi/datamodel/low/v3"
 	"gopkg.in/yaml.v3"
 )
 
@@ -77,11 +79,16 @@ func RegisterTools(server *mcp.Server, specData []byte, client *http.Client, opt
 	for pair := model.Model.Paths.PathItems.First(); pair != nil; pair = pair.Next() {
 		p := pair.Key()
 		item := pair.Value()
+		queryOp, err := queryOperation(item)
+		if err != nil {
+			return fmt.Errorf("error parsing QUERY operation for %s: %w", p, err)
+		}
 		ops := []struct {
 			method string
 			op     *v3.Operation
 		}{
 			{"GET", item.Get},
+			{"QUERY", queryOp},
 			{"POST", item.Post},
 			{"PUT", item.Put},
 			{"DELETE", item.Delete},
@@ -185,7 +192,7 @@ func RegisterTools(server *mcp.Server, specData []byte, client *http.Client, opt
 					OpenWorldHint: &openWorld,
 				}
 				switch op.method {
-				case "GET":
+				case "GET", "QUERY":
 					ann.ReadOnlyHint = true
 					ann.IdempotentHint = true
 				case "POST":
@@ -347,6 +354,49 @@ func RegisterTools(server *mcp.Server, specData []byte, client *http.Client, opt
 		}
 	}
 	return nil
+}
+
+func queryOperation(item *v3.PathItem) (*v3.Operation, error) {
+	if item == nil || item.GoLow() == nil {
+		return nil, nil
+	}
+	if node := pathItemOperationNode(item, "query"); node != nil {
+		return operationFromNode(item, node)
+	}
+	ext := item.GoLow().FindExtension("x-query")
+	if ext == nil || ext.Value == nil {
+		return nil, nil
+	}
+	return operationFromNode(item, ext.Value)
+}
+
+func pathItemOperationNode(item *v3.PathItem, method string) *yaml.Node {
+	root := item.GoLow().GetRootNode()
+	if root == nil {
+		return nil
+	}
+	if root.Kind == yaml.DocumentNode && len(root.Content) > 0 {
+		root = root.Content[0]
+	}
+	for i := 0; i+1 < len(root.Content); i += 2 {
+		if strings.EqualFold(root.Content[i].Value, method) {
+			return root.Content[i+1]
+		}
+	}
+	return nil
+}
+
+func operationFromNode(item *v3.PathItem, node *yaml.Node) (*v3.Operation, error) {
+	op, err, _, _ := low.ExtractObjectRaw[*lowV3.Operation, lowV3.Operation](
+		item.GoLow().GetContext(),
+		nil,
+		node,
+		item.GoLow().GetIndex(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return v3.NewOperation(op), nil
 }
 
 func addParamToSchema(schema *jsonschema.Schema, param *v3.Parameter) {
