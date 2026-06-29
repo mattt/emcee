@@ -224,6 +224,34 @@ cat path/to/openapi.json | \
   emcee
 ```
 
+### HTTP QUERY
+
+emcee supports the HTTP `QUERY` method defined by [RFC 10008][rfc-query].
+OpenAPI 3.2 specifications can use the native `query` Path Item operation;
+older OpenAPI 3.x specifications can use `x-query` as a compatibility extension.
+The value is parsed as a standard OpenAPI Operation Object,
+registered as an MCP tool,
+and annotated as read-only and idempotent.
+
+```yaml
+paths:
+  /search:
+    query:
+      operationId: search
+      summary: Search records
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                q:
+                  type: string
+      responses:
+        "200":
+          description: OK
+```
+
 ### JSON-RPC
 
 You can interact directly with the provided MCP server
@@ -342,7 +370,6 @@ See the LICENSE file for more info.
 [docker-images]: https://github.com/mattt/emcee/pkgs/container/emcee
 [golang]: https://go.dev
 [homebrew]: https://brew.sh
-[homebrew-tap]: https://github.com/mattt/homebrew-tap
 [installer]: https://github.com/mattt/emcee/blob/main/tools/install.sh
 [jq]: https://github.com/jqlang/jq
 [mcp]: https://modelcontextprotocol.io/
@@ -354,5 +381,6 @@ See the LICENSE file for more info.
 [openapi-overlays]: https://www.openapis.org/blog/2024/10/22/announcing-overlay-specification
 [redocly-cli]: https://redocly.com/docs/cli/commands
 [releases]: https://github.com/mattt/emcee/releases
+[rfc-query]: https://datatracker.ietf.org/doc/rfc10008/
 [secret-reference-syntax]: https://developer.1password.com/docs/cli/secret-reference-syntax/
 [yq]: https://github.com/mikefarah/yq
