@@ -327,18 +327,17 @@ by sending JSON-RPC requests.
 
 <summary>Response</summary>
 
-```jsonc
+```json
 {
-  "jsonrpc":"2.0",
-  "content": [
-    {
-      "type": "text",
-      "text": /* Weather forecast in GeoJSON format */,
-      "annotations": {
-        "audience": ["assistant"]
+  "jsonrpc": "2.0",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "/* Weather forecast in GeoJSON format */"
       }
-    }
-  ]
+    ]
+  },
   "id": 1
 }
 ```
