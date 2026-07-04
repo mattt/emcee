@@ -23,6 +23,156 @@ func TestRegisterToolsSupportsQueryExtension(t *testing.T) {
 	testRegisterToolsSupportsQuery(t, "3.1.0", "x-query")
 }
 
+func TestRegisterToolsSupportsXquikOpenAPI31(t *testing.T) {
+	spec := `{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Xquik API",
+    "version": "1.0"
+  },
+  "servers": [
+    {
+      "url": "https://xquik.com"
+    }
+  ],
+  "security": [
+    {
+      "apiKey": []
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "apiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-api-key"
+      }
+    }
+  },
+  "paths": {
+    "/api/v1/x/tweets/search": {
+      "get": {
+        "operationId": "searchTweets",
+        "summary": "Search tweets",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Search results"
+          }
+        }
+      }
+    },
+    "/api/v1/webhooks": {
+      "post": {
+        "operationId": "createWebhook",
+        "summary": "Create webhook",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "eventTypes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "url",
+                  "eventTypes"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Webhook created"
+          }
+        }
+      }
+    }
+  }
+}`
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "dev"}, nil)
+	require.NoError(t, RegisterTools(server, []byte(spec), http.DefaultClient))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(ctx, serverTransport, nil)
+	require.NoError(t, err)
+	defer serverSession.Close()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "client", Version: "dev"}, nil)
+	clientSession, err := client.Connect(ctx, clientTransport, nil)
+	require.NoError(t, err)
+	defer clientSession.Close()
+
+	tools, err := clientSession.ListTools(ctx, nil)
+	require.NoError(t, err)
+
+	var searchTool *mcp.Tool
+	var webhookTool *mcp.Tool
+	for i := range tools.Tools {
+		switch tools.Tools[i].Name {
+		case "searchTweets":
+			searchTool = tools.Tools[i]
+		case "createWebhook":
+			webhookTool = tools.Tools[i]
+		}
+	}
+
+	require.NotNil(t, searchTool)
+	require.NotNil(t, webhookTool)
+	require.NotNil(t, searchTool.Annotations)
+	assert.True(t, searchTool.Annotations.ReadOnlyHint)
+	assert.True(t, searchTool.Annotations.IdempotentHint)
+	require.NotNil(t, webhookTool.Annotations)
+	assert.False(t, webhookTool.Annotations.ReadOnlyHint)
+	assert.False(t, webhookTool.Annotations.IdempotentHint)
+
+	searchSchema := searchTool.InputSchema
+	require.NotNil(t, searchSchema)
+	assert.Contains(t, searchSchema.Properties, "query")
+	assert.Contains(t, searchSchema.Properties, "limit")
+	assert.Contains(t, searchSchema.Required, "query")
+
+	webhookSchema := webhookTool.InputSchema
+	require.NotNil(t, webhookSchema)
+	assert.Contains(t, webhookSchema.Properties, "url")
+	assert.Contains(t, webhookSchema.Properties, "eventTypes")
+	assert.Contains(t, webhookSchema.Required, "url")
+	assert.Contains(t, webhookSchema.Required, "eventTypes")
+}
+
 func testRegisterToolsSupportsQuery(t *testing.T, openAPIVersion, operationKey string) {
 	type observedRequest struct {
 		method string
