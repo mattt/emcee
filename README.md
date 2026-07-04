@@ -330,15 +330,17 @@ by sending JSON-RPC requests.
 ```jsonc
 {
   "jsonrpc":"2.0",
-  "content": [
-    {
-      "type": "text",
-      "text": /* Weather forecast in GeoJSON format */,
-      "annotations": {
-        "audience": ["assistant"]
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": /* Weather forecast in GeoJSON format */,
+        "annotations": {
+          "audience": ["assistant"]
+        }
       }
-    }
-  ]
+    ]
+  },
   "id": 1
 }
 ```
