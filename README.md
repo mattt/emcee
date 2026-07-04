@@ -195,6 +195,23 @@ op signin
 }
 ```
 
+For Xquik, keep the OAuth bearer token in 1Password and point emcee at the
+hosted OpenAPI spec:
+
+```json
+{
+  "mcpServers": {
+    "xquik": {
+      "command": "emcee",
+      "args": [
+        "--bearer-auth=op://shared/xquik/oauth-token",
+        "https://xquik.com/openapi.json"
+      ]
+    }
+  }
+}
+```
+
 <img src="https://github.com/user-attachments/assets/d639fd7c-f3bf-477c-9eb7-229285b36f7d" alt="1Password Access Requested" width="512">
 
 > [!IMPORTANT]  
@@ -330,15 +347,17 @@ by sending JSON-RPC requests.
 ```jsonc
 {
   "jsonrpc":"2.0",
-  "content": [
-    {
-      "type": "text",
-      "text": /* Weather forecast in GeoJSON format */,
-      "annotations": {
-        "audience": ["assistant"]
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": /* Weather forecast in GeoJSON format */,
+        "annotations": {
+          "audience": ["assistant"]
+        }
       }
-    }
-  ]
+    ]
+  },
   "id": 1
 }
 ```
