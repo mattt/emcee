@@ -244,9 +244,11 @@ func RegisterTools(server *mcp.Server, specData []byte, client *http.Client, opt
 				}
 				p = path.Clean(p)
 				u := &url.URL{Scheme: base.Scheme, Host: base.Host}
+				escapePathValue := pathSegmentEscape
 				if base.RawQuery != "" {
 					// The operation path extends the query; see below.
 					u.Path = p
+					escapePathValue = queryComponentEscape
 				} else if base.Path != "" {
 					basePath := path.Clean(base.Path)
 					u.Path = "/" + strings.TrimPrefix(path.Join(basePath, p), "/")
@@ -266,7 +268,7 @@ func RegisterTools(server *mcp.Server, specData []byte, client *http.Client, opt
 				// Path item parameters
 				if pathItem.Parameters != nil {
 					for _, param := range pathItem.Parameters {
-						applyParam(param, req.Params.Arguments, u, q, headers)
+						applyParam(param, req.Params.Arguments, u, q, headers, escapePathValue)
 						if param != nil {
 							usedParamNames[param.Name] = struct{}{}
 						}
@@ -275,7 +277,7 @@ func RegisterTools(server *mcp.Server, specData []byte, client *http.Client, opt
 				// Operation parameters
 				if operation.Parameters != nil {
 					for _, param := range operation.Parameters {
-						applyParam(param, req.Params.Arguments, u, q, headers)
+						applyParam(param, req.Params.Arguments, u, q, headers, escapePathValue)
 						if param != nil {
 							usedParamNames[param.Name] = struct{}{}
 						}
@@ -504,7 +506,7 @@ func getToolName(operationId string) string {
 	return operationId[:55] + "_" + shortHash
 }
 
-func applyParam(param *v3.Parameter, args map[string]any, u *url.URL, q url.Values, headers http.Header) {
+func applyParam(param *v3.Parameter, args map[string]any, u *url.URL, q url.Values, headers http.Header, escapePathValue func(string) string) {
 	if param == nil {
 		return
 	}
@@ -515,7 +517,7 @@ func applyParam(param *v3.Parameter, args map[string]any, u *url.URL, q url.Valu
 	switch param.In {
 	case "path":
 		val := formatParamValue(value)
-		u.Path = strings.ReplaceAll(u.Path, "{"+param.Name+"}", pathSegmentEscape(val))
+		u.Path = strings.ReplaceAll(u.Path, "{"+param.Name+"}", escapePathValue(val))
 	case "query":
 		switch v := value.(type) {
 		case []any:
@@ -573,6 +575,13 @@ func pathSegmentEscape(s string) string {
 		}
 	}
 	return string(t)
+}
+
+// queryComponentEscape escapes a path parameter value for a server URL that routes requests through the query,
+// so that characters such as '&', '=', and '+' in the value don't change the meaning of the query.
+// Spaces are escaped as %20 rather than '+', because only decoders of form-encoded values read '+' as a space.
+func queryComponentEscape(s string) string {
+	return strings.ReplaceAll(url.QueryEscape(s), "+", "%20")
 }
 
 func shouldEscape(c byte) bool {

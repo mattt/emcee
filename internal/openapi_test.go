@@ -264,3 +264,72 @@ func TestRegisterToolsRejectsFractionalIntegerParameters(t *testing.T) {
 	assert.Contains(t, err.Error(), `want "integer"`)
 	assert.Empty(t, requests)
 }
+
+func TestRegisterToolsEscapesPathParametersInServerURLQuery(t *testing.T) {
+	spec := `
+openapi: 3.1.0
+info: { title: TestRail API, version: "2.0.0" }
+servers:
+  - url: https://testrail.example.com/index.php?/api/v2
+paths:
+  /get_user/{user}:
+    get:
+      operationId: getUser
+      parameters:
+        - { name: user, in: path, required: true, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer } }
+      responses:
+        "200": { description: OK }
+`
+	tests := []struct {
+		value string
+		want  string
+	}{
+		{"a&limit=1", "/api/v2/get_user/a%26limit%3D1&limit=50"},
+		{"a=b", "/api/v2/get_user/a%3Db&limit=50"},
+		{"a+b", "/api/v2/get_user/a%2Bb&limit=50"},
+		{"a b", "/api/v2/get_user/a%20b&limit=50"},
+		{"100%", "/api/v2/get_user/100%25&limit=50"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.value, func(t *testing.T) {
+			api, requests := recordRequests(t)
+			opts := []RegisterToolsOption{WithServerURL(api.URL + "/index.php?/api/v2")}
+
+			result, err := callTool(t, spec, api.Client(), opts, "getUser", map[string]any{"user": tt.value, "limit": 50})
+			require.NoError(t, err)
+			require.False(t, result.IsError)
+
+			r := <-requests
+			assert.Equal(t, "/index.php", r.URL.Path)
+			assert.Equal(t, tt.want, r.URL.RawQuery)
+			assert.Equal(t, []string{"50"}, r.URL.Query()["limit"])
+		})
+	}
+}
+
+func TestRegisterToolsAppendsPathToServerURLQuery(t *testing.T) {
+	api, requests := recordRequests(t)
+	spec := fmt.Sprintf(`
+openapi: 3.1.0
+info: { title: Versioned API, version: "1.0.0" }
+servers:
+  - url: %q
+paths:
+  /items:
+    get:
+      operationId: listItems
+      responses:
+        "200": { description: OK }
+`, api.URL+"/api?api-version=2")
+
+	// OpenAPI appends the operation path to the server URL as written,
+	// so the path follows an existing query rather than the server URL's path.
+	result, err := callTool(t, spec, api.Client(), nil, "listItems", nil)
+	require.NoError(t, err)
+	require.False(t, result.IsError)
+
+	r := <-requests
+	assert.Equal(t, "/api", r.URL.Path)
+	assert.Equal(t, "api-version=2/items", r.URL.RawQuery)
+}
