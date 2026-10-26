@@ -1,0 +1,34 @@
+# A subset of the community TestRail specification, which routes requests
+# through the query of its server URLs:
+# https://github.com/trtmn/testrail_api_module/blob/development/openapi/testrail.yaml
+openapi: 3.1.0
+info:
+  title: TestRail API
+  version: "2.0.0"
+servers:
+  - url: https://{instance}.testrail.io/index.php?/api/v2
+    variables:
+      instance:
+        default: example
+  - url: "{base_url}/index.php?/api/v2"
+    variables:
+      base_url:
+        default: https://testrail.example.com
+paths:
+  /get_case/{case_id}:
+    get:
+      operationId: getCase
+      parameters:
+        - { name: case_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: OK }
+  /get_cases/{project_id}:
+    get:
+      operationId: getCases
+      parameters:
+        - { name: project_id, in: path, required: true, schema: { type: integer } }
+        - { name: suite_id, in: query, schema: { type: integer } }
+        - { name: section_id, in: query, schema: { type: integer } }
+        - { name: priority_id, in: query, schema: { type: array, items: { type: integer } } }
+      responses:
+        "200": { description: OK }

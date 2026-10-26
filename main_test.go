@@ -3,6 +3,9 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -12,12 +15,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestIntegration(t *testing.T) {
-	// Build the emcee binary for testing
-	tmpDir := t.TempDir()
-	binaryPath := filepath.Join(tmpDir, "emcee")
+// buildEmcee builds the emcee binary for testing and returns its path.
+func buildEmcee(t *testing.T) string {
+	t.Helper()
+	binaryPath := filepath.Join(t.TempDir(), "emcee")
 	buildCmd := exec.Command("go", "build", "-o", binaryPath, "cmd/emcee/main.go")
 	require.NoError(t, buildCmd.Run(), "Failed to build emcee binary")
+	return binaryPath
+}
+
+// writeMessage writes a JSON-RPC message to w as a single line.
+func writeMessage(t *testing.T, w io.Writer, message map[string]any) {
+	t.Helper()
+	data, err := json.Marshal(message)
+	require.NoError(t, err)
+	_, err = w.Write(append(data, '\n'))
+	require.NoError(t, err)
+}
+
+func TestIntegration(t *testing.T) {
+	binaryPath := buildEmcee(t)
 
 	// Start emcee with the embedded test OpenAPI spec
 	specPath := "testdata/api.weather.gov/openapi.json"
@@ -188,4 +205,76 @@ func TestIntegration(t *testing.T) {
 	assert.Contains(t, zoneIdParam["description"].(string), "NWS public zone/county identifier")
 	assert.Contains(t, zoneIdParam["description"].(string), "UGC identifier for a NWS")
 	assert.Contains(t, zoneTool.InputSchema.Required, "zoneId", "zoneId parameter should be required")
+}
+
+func TestIntegrationServerURL(t *testing.T) {
+	binaryPath := buildEmcee(t)
+
+	requestURIs := make(chan string, 1)
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestURIs <- r.RequestURI
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":30245416}`))
+	}))
+	defer api.Close()
+
+	cmd := exec.Command(binaryPath, "--server-url", api.URL+"/index.php?/api/v2", "testdata/testrail/openapi.yaml")
+	stdin, err := cmd.StdinPipe()
+	require.NoError(t, err)
+	stdout, err := cmd.StdoutPipe()
+	require.NoError(t, err)
+	require.NoError(t, cmd.Start())
+	defer func() {
+		stdin.Close()
+		cmd.Process.Kill()
+		cmd.Wait()
+	}()
+
+	scanner := bufio.NewScanner(stdout)
+
+	writeMessage(t, stdin, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "initialize",
+		"params": map[string]any{
+			"protocolVersion": "2025-06-18",
+			"capabilities":    map[string]any{},
+			"clientInfo":      map[string]any{"name": "emcee-test", "version": "dev"},
+		},
+	})
+	require.True(t, scanner.Scan(), "Expected initialize response")
+
+	writeMessage(t, stdin, map[string]any{
+		"jsonrpc": "2.0",
+		"method":  "notifications/initialized",
+		"params":  map[string]any{},
+	})
+
+	writeMessage(t, stdin, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name":      "getCases",
+			"arguments": map[string]any{"project_id": 83, "section_id": 2046975},
+		},
+	})
+	require.True(t, scanner.Scan(), "Expected tools/call response")
+
+	var response struct {
+		ID     int `json:"id"`
+		Result struct {
+			IsError bool `json:"isError"`
+		} `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(scanner.Bytes(), &response), "Failed to parse JSON response")
+	assert.Equal(t, 2, response.ID)
+	assert.False(t, response.Result.IsError)
+
+	select {
+	case uri := <-requestURIs:
+		assert.Equal(t, "/index.php?/api/v2/get_cases/83&section_id=2046975", uri)
+	case <-time.After(5 * time.Second):
+		t.Fatal("Expected a request to the API server")
+	}
 }
