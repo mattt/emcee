@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -114,4 +116,151 @@ func testRegisterToolsSupportsQuery(t *testing.T, openAPIVersion, operationKey s
 	require.NoError(t, obs.err)
 	assert.Equal(t, "QUERY", obs.method)
 	assert.Equal(t, map[string]any{"q": "emcee"}, obs.body)
+}
+
+// readTestRailSpec reads a subset of the TestRail specification.
+func readTestRailSpec(t *testing.T) string {
+	t.Helper()
+	spec, err := os.ReadFile("../testdata/testrail/openapi.yaml")
+	require.NoError(t, err)
+	return string(spec)
+}
+
+// recordRequests starts a test server that records the requests it receives.
+func recordRequests(t *testing.T) (*httptest.Server, <-chan *http.Request) {
+	t.Helper()
+	requests := make(chan *http.Request, 1)
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests <- r
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	t.Cleanup(api.Close)
+	return api, requests
+}
+
+// callTool registers tools from spec and calls the named tool with args.
+func callTool(t *testing.T, spec string, client *http.Client, opts []RegisterToolsOption, name string, args map[string]any) (*mcp.CallToolResult, error) {
+	t.Helper()
+	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "dev"}, nil)
+	require.NoError(t, RegisterTools(server, []byte(spec), client, opts...))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	t.Cleanup(cancel)
+
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(ctx, serverTransport, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { serverSession.Close() })
+
+	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "client", Version: "dev"}, nil)
+	clientSession, err := mcpClient.Connect(ctx, clientTransport, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { clientSession.Close() })
+
+	return clientSession.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: args})
+}
+
+func TestRegisterToolsExpandsServerVariables(t *testing.T) {
+	api, requests := recordRequests(t)
+	spec := fmt.Sprintf(`
+openapi: 3.1.0
+info: { title: Variables API, version: "1.0.0" }
+servers:
+  - url: "{scheme}://{host}/{version}"
+    variables:
+      scheme: { default: http }
+      host: { default: %q }
+      version: { default: v1, enum: [v1, v2] }
+paths:
+  /items:
+    get:
+      operationId: listItems
+      responses:
+        "200": { description: OK }
+`, strings.TrimPrefix(api.URL, "http://"))
+
+	result, err := callTool(t, spec, api.Client(), nil, "listItems", nil)
+	require.NoError(t, err)
+	require.False(t, result.IsError)
+
+	r := <-requests
+	assert.Equal(t, "/v1/items", r.URL.Path)
+}
+
+func TestRegisterToolsWithServerURL(t *testing.T) {
+	api, requests := recordRequests(t)
+	opts := []RegisterToolsOption{WithServerURL(api.URL + "/index.php?/api/v2")}
+
+	result, err := callTool(t, readTestRailSpec(t), api.Client(), opts, "getCase", map[string]any{"case_id": 30245416})
+	require.NoError(t, err)
+	require.False(t, result.IsError)
+
+	r := <-requests
+	assert.Equal(t, "/index.php", r.URL.Path)
+	assert.Equal(t, "/api/v2/get_case/30245416", r.URL.RawQuery)
+}
+
+func TestRegisterToolsExtendsServerURLQuery(t *testing.T) {
+	api, requests := recordRequests(t)
+	opts := []RegisterToolsOption{WithServerURL(api.URL + "/index.php?/api/v2")}
+
+	result, err := callTool(t, readTestRailSpec(t), api.Client(), opts, "getCases", map[string]any{
+		"project_id":  83,
+		"suite_id":    68297,
+		"section_id":  2046975,
+		"priority_id": []any{1, 2},
+	})
+	require.NoError(t, err)
+	require.False(t, result.IsError)
+
+	r := <-requests
+	assert.Equal(t, "/index.php", r.URL.Path)
+	assert.Equal(t, "/api/v2/get_cases/83&priority_id=1%2C2&section_id=2046975&suite_id=68297", r.URL.RawQuery)
+}
+
+func TestRegisterToolsFormatsIntegerParameters(t *testing.T) {
+	api, requests := recordRequests(t)
+	spec := fmt.Sprintf(`
+openapi: 3.1.0
+info: { title: Integer API, version: "1.0.0" }
+servers:
+  - url: %q
+paths:
+  /cases/{case_id}:
+    get:
+      operationId: getCases
+      parameters:
+        - { name: case_id, in: path, required: true, schema: { type: integer } }
+        - { name: section_id, in: query, schema: { type: integer } }
+        - { name: ids, in: query, schema: { type: array, items: { type: integer } } }
+        - { name: X-Request-Id, in: header, schema: { type: integer } }
+      responses:
+        "200": { description: OK }
+`, api.URL)
+
+	result, err := callTool(t, spec, api.Client(), nil, "getCases", map[string]any{
+		"case_id":      30245416,
+		"section_id":   2046975,
+		"ids":          []any{30245416, 2046975},
+		"X-Request-Id": 1234567890,
+	})
+	require.NoError(t, err)
+	require.False(t, result.IsError)
+
+	r := <-requests
+	assert.Equal(t, "/cases/30245416", r.URL.Path)
+	assert.Equal(t, "2046975", r.URL.Query().Get("section_id"))
+	assert.Equal(t, "30245416,2046975", r.URL.Query().Get("ids"))
+	assert.Equal(t, "1234567890", r.Header.Get("X-Request-Id"))
+}
+
+func TestRegisterToolsRejectsFractionalIntegerParameters(t *testing.T) {
+	api, requests := recordRequests(t)
+	opts := []RegisterToolsOption{WithServerURL(api.URL + "/index.php?/api/v2")}
+
+	_, err := callTool(t, readTestRailSpec(t), api.Client(), opts, "getCase", map[string]any{"case_id": 1.5})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `want "integer"`)
+	assert.Empty(t, requests)
 }

@@ -218,6 +218,9 @@ Authentication values can be provided directly or as 1Password secret references
 			if noAnnotations {
 				opts = append(opts, internal.WithoutAnnotations())
 			}
+			if serverURL != "" {
+				opts = append(opts, internal.WithServerURL(serverURL))
+			}
 			if err := internal.RegisterTools(server, specData, client, opts...); err != nil {
 				return fmt.Errorf("error registering tools: %w", err)
 			}
@@ -234,6 +237,8 @@ var (
 	bearerAuth string
 	basicAuth  string
 	rawAuth    string
+
+	serverURL string
 
 	retries  int
 	timeout  time.Duration
@@ -254,6 +259,8 @@ func init() {
 	rootCmd.Flags().StringVar(&basicAuth, "basic-auth", "", "Basic auth value (either user:pass or base64 encoded, will be prefixed with 'Basic ')")
 	rootCmd.Flags().StringVar(&rawAuth, "raw-auth", "", "Raw value for Authorization header")
 	rootCmd.MarkFlagsMutuallyExclusive("bearer-auth", "basic-auth", "raw-auth")
+
+	rootCmd.Flags().StringVar(&serverURL, "server-url", "", "Base URL for API requests (overrides the servers in the OpenAPI spec)")
 
 	rootCmd.Flags().IntVar(&retries, "retries", 3, "Maximum number of retries for failed requests")
 	rootCmd.Flags().DurationVar(&timeout, "timeout", 60*time.Second, "HTTP request timeout")

@@ -138,6 +138,7 @@ Flags:
       --raw-auth string      Raw value for Authorization header
       --retries int          Maximum number of retries for failed requests (default 3)
   -r, --rps int              Maximum requests per second (0 for no limit)
+      --server-url string    Base URL for API requests (overrides the servers in the OpenAPI spec)
   -s, --silent               Disable all logging
       --timeout duration     HTTP request timeout (default 1m0s)
   -v, --verbose              Enable debug level logging to stderr

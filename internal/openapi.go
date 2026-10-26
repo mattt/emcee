@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -28,11 +29,17 @@ type RegisterToolsOption func(*registerToolsConfig)
 
 type registerToolsConfig struct {
 	enableAnnotations bool
+	serverURL         string
 }
 
 // WithoutAnnotations disables attaching REST-aware MCP ToolAnnotations for generated tools.
 func WithoutAnnotations() RegisterToolsOption {
 	return func(cfg *registerToolsConfig) { cfg.enableAnnotations = false }
+}
+
+// WithServerURL sets the base URL for API requests, overriding the servers in the OpenAPI specification.
+func WithServerURL(serverURL string) RegisterToolsOption {
+	return func(cfg *registerToolsConfig) { cfg.serverURL = serverURL }
 }
 
 // RegisterTools parses the given OpenAPI specification and registers tools on the provided MCP server.
@@ -66,10 +73,14 @@ func RegisterTools(server *mcp.Server, specData []byte, client *http.Client, opt
 		return fmt.Errorf("error building OpenAPI model: %v", errs[0])
 	}
 
-	if len(model.Model.Servers) == 0 || model.Model.Servers[0].URL == "" {
-		return fmt.Errorf("OpenAPI spec must include at least one server URL")
+	baseURL := cfg.serverURL
+	if baseURL == "" {
+		if len(model.Model.Servers) == 0 || model.Model.Servers[0].URL == "" {
+			return fmt.Errorf("OpenAPI spec must include at least one server URL")
+		}
+		baseURL = expandServerURL(model.Model.Servers[0])
 	}
-	baseURL := strings.TrimSuffix(model.Model.Servers[0].URL, "/")
+	baseURL = strings.TrimSuffix(baseURL, "/")
 
 	// Iterate operations and register tools.
 	if model.Model.Paths == nil || model.Model.Paths.PathItems == nil {
@@ -233,7 +244,10 @@ func RegisterTools(server *mcp.Server, specData []byte, client *http.Client, opt
 				}
 				p = path.Clean(p)
 				u := &url.URL{Scheme: base.Scheme, Host: base.Host}
-				if base.Path != "" {
+				if base.RawQuery != "" {
+					// The operation path extends the query; see below.
+					u.Path = p
+				} else if base.Path != "" {
 					basePath := path.Clean(base.Path)
 					u.Path = "/" + strings.TrimPrefix(path.Join(basePath, p), "/")
 				} else {
@@ -294,7 +308,15 @@ func RegisterTools(server *mcp.Server, specData []byte, client *http.Client, opt
 					}
 				}
 
-				if len(q) > 0 {
+				if base.RawQuery != "" {
+					// Some APIs, such as TestRail, route requests through the query
+					// (for example, index.php?/api/v2), so extend the existing query
+					// with the operation path and parameters instead of replacing it.
+					u.Path, u.RawQuery = base.Path, base.RawQuery+u.Path
+					if len(q) > 0 {
+						u.RawQuery += "&" + q.Encode()
+					}
+				} else if len(q) > 0 {
 					u.RawQuery = q.Encode()
 				}
 
@@ -402,6 +424,19 @@ func operationFromNode(item *v3.PathItem, node *yaml.Node) (*v3.Operation, error
 	return v3.NewOperation(op), nil
 }
 
+// expandServerURL substitutes the default values of server variables into the server URL.
+func expandServerURL(server *v3.Server) string {
+	u := server.URL
+	if server.Variables != nil {
+		for pair := server.Variables.First(); pair != nil; pair = pair.Next() {
+			if v := pair.Value(); v != nil {
+				u = strings.ReplaceAll(u, "{"+pair.Key()+"}", v.Default)
+			}
+		}
+	}
+	return u
+}
+
 func addParamToSchema(schema *jsonschema.Schema, param *v3.Parameter) {
 	if param == nil || param.Schema == nil {
 		return
@@ -479,22 +514,33 @@ func applyParam(param *v3.Parameter, args map[string]any, u *url.URL, q url.Valu
 	}
 	switch param.In {
 	case "path":
-		val := fmt.Sprint(value)
+		val := formatParamValue(value)
 		u.Path = strings.ReplaceAll(u.Path, "{"+param.Name+"}", pathSegmentEscape(val))
 	case "query":
 		switch v := value.(type) {
 		case []any:
 			strs := make([]string, len(v))
 			for i, it := range v {
-				strs[i] = fmt.Sprint(it)
+				strs[i] = formatParamValue(it)
 			}
 			q.Set(param.Name, strings.Join(strs, ","))
 		default:
-			q.Set(param.Name, fmt.Sprint(value))
+			q.Set(param.Name, formatParamValue(value))
 		}
 	case "header":
-		headers.Add(param.Name, fmt.Sprint(value))
+		headers.Add(param.Name, formatParamValue(value))
 	}
+}
+
+// formatParamValue formats an argument value for a path, query, or header parameter.
+// Tool arguments decode JSON numbers as float64, which fmt.Sprint formats
+// in exponent notation when large (3.0245416e+07),
+// so numbers are formatted as decimals instead (30245416).
+func formatParamValue(value any) string {
+	if f, ok := value.(float64); ok {
+		return strconv.FormatFloat(f, 'f', -1, 64)
+	}
+	return fmt.Sprint(value)
 }
 
 // pathSegmentEscape preserves valid URL segment characters per RFC 3986.
