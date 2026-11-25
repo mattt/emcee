@@ -25,13 +25,6 @@ archives:
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
 
-brews:
-  - repository:
-      owner: mattt
-      name: homebrew-tap
-      token: "{{ .Env.GH_PAT }}"
-    directory: Formula
-
 kos:
   - platforms:
       - linux/amd64
