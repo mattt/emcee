@@ -265,6 +265,41 @@ func TestRegisterToolsRejectsFractionalIntegerParameters(t *testing.T) {
 	assert.Empty(t, requests)
 }
 
+func TestRegisterToolsEscapesPathParameters(t *testing.T) {
+	api, requests := recordRequests(t)
+	spec := fmt.Sprintf(`
+openapi: 3.1.0
+info: { title: Items API, version: "1.0.0" }
+servers:
+  - url: %q
+paths:
+  /items/{id}/details:
+    get:
+      operationId: getDetails
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: OK }
+`, api.URL+"/v1")
+	for _, tt := range []struct{ value, escaped string }{
+		{"100%", "100%25"},
+		{"a/b", "a%2Fb"},
+		{"a b", "a%20b"},
+		{"item-42", "item-42"},
+		{"a,b;c", "a,b;c"},
+	} {
+		t.Run(tt.value, func(t *testing.T) {
+			result, err := callTool(t, spec, api.Client(), nil, "getDetails", map[string]any{"id": tt.value})
+			require.NoError(t, err)
+			require.False(t, result.IsError)
+
+			r := <-requests
+			assert.Equal(t, "/v1/items/"+tt.value+"/details", r.URL.Path)
+			assert.Equal(t, "/v1/items/"+tt.escaped+"/details", r.RequestURI)
+		})
+	}
+}
+
 func TestRegisterToolsEscapesPathParametersInServerURLQuery(t *testing.T) {
 	spec := `
 openapi: 3.1.0
